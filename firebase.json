@@ -1,0 +1,42 @@
+{
+  "flutter": {
+    "platforms": {
+      "android": {
+        "default": {
+          "projectId": "soulsync-dairyapp",
+          "appId": "1:961740823486:android:c88fe552647ff978b5f7ef",
+          "fileOutput": "android/app/google-services.json"
+        }
+      },
+      "dart": {
+        "lib/firebase_options.dart": {
+          "projectId": "soulsync-dairyapp",
+          "configurations": {
+            "android": "1:961740823486:android:c88fe552647ff978b5f7ef",
+            "ios": "1:961740823486:ios:7b8cc348f8fb7ffbb5f7ef",
+            "macos": "1:961740823486:ios:7b8cc348f8fb7ffbb5f7ef",
+            "web": "1:961740823486:web:0506d6ab13915c7fb5f7ef",
+            "windows": "1:961740823486:web:ae1a749bb46f3918b5f7ef"
+          }
+        }
+      }
+    }
+  },
+  "functions": [
+    {
+      "source": "functions",
+      "codebase": "default",
+      "disallowLegacyRuntimeConfig": true,
+      "ignore": [
+        "node_modules",
+        ".git",
+        "firebase-debug.log",
+        "firebase-debug.*.log",
+        "*.local"
+      ],
+      "predeploy": [
+        "npm --prefix \"$RESOURCE_DIR\" run build"
+      ]
+    }
+  ]
+}

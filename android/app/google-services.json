@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "961740823486",
+    "project_id": "soulsync-dairyapp",
+    "storage_bucket": "soulsync-dairyapp.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:961740823486:android:c88fe552647ff978b5f7ef",
+        "android_client_info": {
+          "package_name": "com.example.soulsync_dairyapp"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAUnNbKhE5gPWZp5rLhvk9tkurxQ9FOJJA"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
