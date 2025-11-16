@@ -1059,13 +1059,21 @@ class _NewEntryScreenState extends State<NewEntryScreen>
                                       constraints: BoxConstraints(
                                         minHeight: constraints.maxHeight,
                                       ),
-                                      child: quill.QuillEditor.basic(
-                                        controller: _quillController,
-                                        focusNode: _contentFocusNode,
-                                        config: quill.QuillEditorConfig(
-                                          padding: EdgeInsets.only(bottom: 100),
-                                          scrollable: false, // Disable internal scrolling - let parent handle it
-                                          embedBuilders: [
+                                      child: DefaultTextStyle(
+                                        style: GoogleFonts.poppins(
+                                          fontSize: 16,
+                                          color: widget.isLightTheme
+                                              ? const Color(0xFF5E3A9E)
+                                              : Colors.white,
+                                        ),
+                                        child: quill.QuillEditor.basic(
+                                          controller: _quillController,
+                                          focusNode: _contentFocusNode,
+                                          config: quill.QuillEditorConfig(
+                                            padding: EdgeInsets.only(bottom: 100),
+                                            scrollable: false, // Disable internal scrolling - let parent handle it
+                                            placeholder: 'Start writing...',
+                                            embedBuilders: [
                                             // Custom image embed with delete button
                                             ImageEmbedBuilder(
                                               isLightTheme: widget.isLightTheme,
@@ -1096,6 +1104,7 @@ class _NewEntryScreenState extends State<NewEntryScreen>
                                         ),
                                       ),
                                     ),
+                                  ),
                                   ],
                                 ),
                               ),
@@ -1161,6 +1170,7 @@ class _NewEntryScreenState extends State<NewEntryScreen>
                   right: 0,
                   child: EditorToolbar(
                     controller: _quillController,
+                    isLightTheme: widget.isLightTheme,
                     onDone: () =>
                         setState(() => _showFormattingToolbar = false),
                   ),

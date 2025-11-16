@@ -27,6 +27,7 @@ class EditorToolbar extends StatefulWidget {
   final VoidCallback onDone;
   final VoidCallback? onCancel;
   final bool autoApplyOnBlur;
+  final bool isLightTheme;
 
   const EditorToolbar({
     super.key,
@@ -34,6 +35,7 @@ class EditorToolbar extends StatefulWidget {
     required this.onDone,
     this.onCancel,
     this.autoApplyOnBlur = false,
+    this.isLightTheme = true,
   });
 
   @override
@@ -68,10 +70,9 @@ class _EditorToolbarState extends State<EditorToolbar> {
 
   /// Get default text color based on theme
   Color _getDefaultTextColor() {
-    final brightness = Theme.of(context).brightness;
-    if (brightness == Brightness.light) {
+    if (widget.isLightTheme) {
       // Light theme: use primary purple
-      return Theme.of(context).colorScheme.primary;
+      return const Color(0xFF5E3A9E);
     } else {
       // Dark/Black theme: use white
       return Colors.white;
@@ -328,7 +329,7 @@ class _EditorToolbarState extends State<EditorToolbar> {
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
-    final isLightTheme = Theme.of(context).brightness == Brightness.light;
+    final isLightTheme = widget.isLightTheme;
 
     return Container(
       decoration: BoxDecoration(
@@ -715,9 +716,18 @@ class _EditorToolbarState extends State<EditorToolbar> {
       context: context,
       barrierDismissible: true,
       builder: (ctx) => AlertDialog(
+        backgroundColor: widget.isLightTheme
+            ? const Color(0xFFF8F4FF)
+            : Colors.grey[900],
         title: Text(
           'Pick a Color',
-          style: GoogleFonts.poppins(fontSize: 18, fontWeight: FontWeight.w600),
+          style: GoogleFonts.poppins(
+            fontSize: 18,
+            fontWeight: FontWeight.w600,
+            color: widget.isLightTheme
+                ? const Color(0xFF5E3A9E)
+                : Colors.white,
+          ),
         ),
         content: SingleChildScrollView(
           child: BlockPicker(
@@ -730,7 +740,14 @@ class _EditorToolbarState extends State<EditorToolbar> {
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx),
-            child: Text('Cancel', style: GoogleFonts.poppins()),
+            child: Text(
+              'Cancel',
+              style: GoogleFonts.poppins(
+                color: widget.isLightTheme
+                    ? Colors.grey[600]
+                    : Colors.white.withValues(alpha: 0.7),
+              ),
+            ),
           ),
           ElevatedButton(
             onPressed: () {
@@ -738,8 +755,12 @@ class _EditorToolbarState extends State<EditorToolbar> {
               Navigator.pop(ctx);
             },
             style: ElevatedButton.styleFrom(
-              backgroundColor: Theme.of(context).colorScheme.primary,
-              foregroundColor: Colors.white,
+              backgroundColor: widget.isLightTheme
+                  ? const Color(0xFF5E3A9E)
+                  : Colors.white,
+              foregroundColor: widget.isLightTheme
+                  ? Colors.white
+                  : const Color(0xFF5E3A9E),
             ),
             child: Text(
               'Apply',
