@@ -949,7 +949,9 @@ class _SettingsPageState extends State<SettingsPage> {
                         Container(
                           padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
                           decoration: BoxDecoration(
-                            color: const Color(0xFFE8D5FF).withValues(alpha: 0.9),
+                            color: isLightTheme
+                                ? Colors.white.withValues(alpha: 0.95)
+                                : Colors.white.withValues(alpha: 0.15),
                             borderRadius: BorderRadius.circular(16),
                             border: Border.all(
                               color: isLightTheme
@@ -1122,7 +1124,9 @@ class _SettingsPageState extends State<SettingsPage> {
     required VoidCallback onTap,
     Color? iconColor,
   }) {
-    final cardColor = const Color(0xFFE8D5FF).withValues(alpha: 0.9);
+    final cardColor = isLightTheme
+        ? Colors.white.withValues(alpha: 0.95)
+        : Colors.white.withValues(alpha: 0.15);
 
     return GestureDetector(
       onTap: onTap,
@@ -1224,7 +1228,9 @@ class _SettingsPageState extends State<SettingsPage> {
     required bool isDarkTheme,
     required VoidCallback onTap,
   }) {
-    final cardColor = const Color(0xFFE8D5FF).withValues(alpha: 0.9);
+    final cardColor = isLightTheme
+        ? Colors.white.withValues(alpha: 0.95)
+        : Colors.white.withValues(alpha: 0.15);
 
     return GestureDetector(
       onTap: onTap,
@@ -1326,7 +1332,9 @@ class _SettingsPageState extends State<SettingsPage> {
     required bool value,
     required ValueChanged<bool> onChanged,
   }) {
-    final cardColor = const Color(0xFFE8D5FF).withValues(alpha: 0.9);
+    final cardColor = isLightTheme
+        ? Colors.white.withValues(alpha: 0.95)
+        : Colors.white.withValues(alpha: 0.15);
 
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),

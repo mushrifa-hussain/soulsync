@@ -19,6 +19,7 @@ import 'package:soulsync_dairyapp/models/diary_entry.dart';
 import 'package:soulsync_dairyapp/providers/diary_entries_provider.dart';
 import 'package:soulsync_dairyapp/services/quill_migration_service.dart';
 import 'package:soulsync_dairyapp/widgets/editor_toolbar.dart';
+import 'package:soulsync_dairyapp/services/aiml_api_service.dart';
 
 /// Simplified diary entry screen using pure Quill
 /// All content (text, images, videos) handled by Quill's native embeds
@@ -30,6 +31,8 @@ class NewEntryScreen extends StatefulWidget {
   final DateTime? initialDate;
   final MediaAttachment? scrollToMedia;
   final String? initialMood;
+  final String? initialContent; // For AI summary or other initial text
+  final bool navigateToHomeOnSave; // If true, navigate to home after saving instead of popping
 
   const NewEntryScreen({
     super.key,
@@ -39,6 +42,8 @@ class NewEntryScreen extends StatefulWidget {
     this.initialDate,
     this.scrollToMedia,
     this.initialMood,
+    this.initialContent,
+    this.navigateToHomeOnSave = false,
   });
 
   @override
@@ -51,7 +56,7 @@ class _NewEntryScreenState extends State<NewEntryScreen>
   final TextEditingController _titleController = TextEditingController();
   late quill.QuillController _quillController;
   final FocusNode _contentFocusNode = FocusNode();
-
+  
   // State
   String? _selectedMood;
   late DateTime _selectedDate;
@@ -72,7 +77,14 @@ class _NewEntryScreenState extends State<NewEntryScreen>
   late AnimationController _hintAnimationController;
   late Animation<double> _hintFadeAnimation;
   late Animation<double> _hintScaleAnimation;
-
+  
+  // AI Face animation
+  late AnimationController _aiBlinkController;
+  late Animation<double> _aiBlinkAnimation;
+  late AnimationController _aiGlowController;
+  late Animation<double> _aiGlowAnimation;
+  bool _aiIsActive = false; // Active/talking state
+  
   bool _showEmojiHint = true;
   bool get _isEditing => widget.existingEntry != null;
 
@@ -103,7 +115,7 @@ class _NewEntryScreenState extends State<NewEntryScreen>
       curve: Curves.easeOut,
     );
     _fadeController.forward();
-
+    
     _hintAnimationController = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 400),
@@ -114,13 +126,13 @@ class _NewEntryScreenState extends State<NewEntryScreen>
     _hintScaleAnimation = Tween<double>(begin: 1.1, end: 1.0).animate(
       CurvedAnimation(parent: _hintAnimationController, curve: Curves.easeOut),
     );
-
+    
     Future.delayed(const Duration(milliseconds: 300), () {
       if (mounted && _showEmojiHint && _selectedMood == null) {
         _hintAnimationController.forward();
       }
     });
-
+    
     _calendarController = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 250),
@@ -132,6 +144,33 @@ class _NewEntryScreenState extends State<NewEntryScreen>
       CurvedAnimation(parent: _calendarController, curve: Curves.easeOut),
     );
 
+    // Initialize AI face blinking animation (4 second cycle)
+    _aiBlinkController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 4000),
+    )..repeat();
+    _aiBlinkAnimation = TweenSequence<double>([
+      TweenSequenceItem(tween: ConstantTween<double>(0.0), weight: 75.0), // Eyes open: 3s
+      TweenSequenceItem(
+        tween: Tween<double>(begin: 0.0, end: 1.0).chain(CurveTween(curve: Curves.easeInOut)),
+        weight: 7.5, // Closing: 0.3s
+      ),
+      TweenSequenceItem(tween: ConstantTween<double>(1.0), weight: 10.0), // Closed: 0.4s
+      TweenSequenceItem(
+        tween: Tween<double>(begin: 1.0, end: 0.0).chain(CurveTween(curve: Curves.easeInOut)),
+        weight: 7.5, // Opening: 0.3s
+      ),
+    ]).animate(_aiBlinkController);
+    
+    // Initialize AI glow pulse animation (6 seconds)
+    _aiGlowController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 6000),
+    )..repeat(reverse: true);
+    _aiGlowAnimation = Tween<double>(begin: 0.6, end: 1.0).animate(
+      CurvedAnimation(parent: _aiGlowController, curve: Curves.easeInOut),
+    );
+
     // Initialize date and mood
     _selectedDate = widget.initialDate ?? DateTime.now();
     if (widget.initialMood != null) {
@@ -141,6 +180,13 @@ class _NewEntryScreenState extends State<NewEntryScreen>
     // Load existing entry if editing
     if (widget.existingEntry != null) {
       _loadExistingEntry();
+    } else if (widget.initialContent != null && widget.initialContent!.isNotEmpty) {
+      // Initialize with initial content (e.g., from AI summary)
+      final document = quill.Document()..insert(0, widget.initialContent!);
+      _quillController = quill.QuillController(
+        document: document,
+        selection: const TextSelection.collapsed(offset: 0),
+      );
     } else {
       _quillController = quill.QuillController.basic();
     }
@@ -196,10 +242,10 @@ class _NewEntryScreenState extends State<NewEntryScreen>
         }
       } else {
         final document = quill.Document()..insert(0, entry.content);
-        _quillController = quill.QuillController(
-          document: document,
-          selection: const TextSelection.collapsed(offset: 0),
-        );
+    _quillController = quill.QuillController(
+      document: document,
+      selection: const TextSelection.collapsed(offset: 0),
+    );
       }
     } else {
       _quillController = quill.QuillController.basic();
@@ -214,6 +260,8 @@ class _NewEntryScreenState extends State<NewEntryScreen>
     _fadeController.dispose();
     _calendarController.dispose();
     _hintAnimationController.dispose();
+    _aiBlinkController.dispose();
+    _aiGlowController.dispose();
     super.dispose();
   }
 
@@ -233,11 +281,11 @@ class _NewEntryScreenState extends State<NewEntryScreen>
   String _getFormattedDate() {
     return DateFormat('d MMM yyyy').format(_selectedDate);
   }
-
+  
   String _getFormattedDateForStorage() {
     return DateFormat('d MMM').format(_selectedDate);
   }
-
+  
   void _toggleCalendar() {
     setState(() {
       _showCalendar = !_showCalendar;
@@ -248,7 +296,7 @@ class _NewEntryScreenState extends State<NewEntryScreen>
       }
     });
   }
-
+  
   void _selectDate(DateTime date) {
     setState(() {
       _selectedDate = date;
@@ -269,9 +317,9 @@ class _NewEntryScreenState extends State<NewEntryScreen>
     // Get Quill delta (contains text + embedded images/videos)
     final deltaJson = _quillController.document.toDelta().toJson();
     final quillDelta = <String, dynamic>{'ops': deltaJson};
-
+    
     final entry = DiaryEntry(
-      id: _isEditing
+      id: _isEditing 
           ? widget.existingEntry!.id
           : DateTime.now().millisecondsSinceEpoch.toString(),
       date: _getFormattedDateForStorage(),
@@ -293,7 +341,7 @@ class _NewEntryScreenState extends State<NewEntryScreen>
         listen: false,
       );
       await provider.saveEntry(entry);
-
+      
       if (mounted) {
         _showSuccessAnimation();
       }
@@ -307,17 +355,27 @@ class _NewEntryScreenState extends State<NewEntryScreen>
   }
 
   void _showSuccessAnimation() {
-    showDialog(
-      context: context,
-      barrierColor: Colors.transparent,
-      barrierDismissible: false,
-      builder: (context) => const _GlowAnimation(),
-    );
-
+        showDialog(
+          context: context,
+          barrierColor: Colors.transparent,
+          barrierDismissible: false,
+          builder: (context) => const _GlowAnimation(),
+        );
+        
     Future.delayed(const Duration(milliseconds: 800), () {
-      if (mounted) {
-        Navigator.of(context).pop();
-        Navigator.of(context).pop(true);
+        if (mounted) {
+        Navigator.of(context).pop(); // Close animation dialog
+        
+        if (widget.navigateToHomeOnSave) {
+          // Navigate to home and remove all previous routes (including AI chat)
+          Navigator.of(context).pushNamedAndRemoveUntil(
+            '/home',
+            (route) => false, // Remove all previous routes
+          );
+        } else {
+          // Normal behavior - pop back to previous screen
+          Navigator.of(context).pop(true);
+        }
       }
     });
   }
@@ -330,7 +388,7 @@ class _NewEntryScreenState extends State<NewEntryScreen>
         }
       });
     }
-
+    
     showModalBottomSheet(
       context: context,
       backgroundColor: Colors.transparent,
@@ -446,14 +504,14 @@ class _NewEntryScreenState extends State<NewEntryScreen>
               }
             },
             child: Text(
-              'Delete',
-              style: GoogleFonts.poppins(
-                color: const Color(0xFF5E3A9E),
+                          'Delete',
+                          style: GoogleFonts.poppins(
+                            color: const Color(0xFF5E3A9E),
                 fontWeight: FontWeight.w600,
-              ),
-            ),
-          ),
-        ],
+                          ),
+                    ),
+                  ),
+                ],
       ),
     );
   }
@@ -561,23 +619,23 @@ class _NewEntryScreenState extends State<NewEntryScreen>
                 borderRadius: BorderRadius.circular(16),
               ),
               child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
                     'Select Source',
-                    style: GoogleFonts.poppins(
-                      fontSize: 18,
+                            style: GoogleFonts.poppins(
+                              fontSize: 18,
                       fontWeight: FontWeight.w600,
-                      color: widget.isLightTheme
-                          ? const Color(0xFF5E3A9E)
-                          : Colors.white,
-                    ),
-                  ),
+                              color: widget.isLightTheme
+                                  ? const Color(0xFF5E3A9E)
+                                  : Colors.white,
+                            ),
+                          ),
                   const SizedBox(height: 16),
                   ListTile(
                     leading: Icon(
                       Icons.camera_alt_rounded,
-                      color: widget.isLightTheme
+                            color: widget.isLightTheme
                           ? const Color(0xFF5E3A9E)
                           : Colors.white,
                     ),
@@ -607,10 +665,10 @@ class _NewEntryScreenState extends State<NewEntryScreen>
                       ),
                     ),
                     onTap: () => Navigator.pop(context, ImageSource.gallery),
-                  ),
-                ],
-              ),
-            ),
+                          ),
+                        ],
+                      ),
+                    ),
           ),
         ),
       ),
@@ -799,10 +857,10 @@ class _NewEntryScreenState extends State<NewEntryScreen>
                 ),
                 onPressed: () => Navigator.pop(context),
               ),
-            ),
-          ],
-        ),
-      ),
+                    ),
+                  ],
+                ),
+              ),
     );
   }
 
@@ -814,7 +872,7 @@ class _NewEntryScreenState extends State<NewEntryScreen>
         backgroundColor: Colors.black,
         insetPadding: const EdgeInsets.all(20),
         child: Stack(
-          children: [
+                  children: [
             Center(child: _VideoPlayerWidget(videoPath: videoPath)),
             Positioned(
               top: 10,
@@ -826,11 +884,11 @@ class _NewEntryScreenState extends State<NewEntryScreen>
                   size: 28,
                 ),
                 onPressed: () => Navigator.pop(context),
-              ),
-            ),
-          ],
-        ),
-      ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
     );
   }
 
@@ -869,108 +927,27 @@ class _NewEntryScreenState extends State<NewEntryScreen>
   void _showStickerPicker() {
     FocusScope.of(context).unfocus();
 
-    // Simple sticker picker (can be expanded)
+    // Categorized sticker picker
     showModalBottomSheet(
       context: context,
       backgroundColor: Colors.transparent,
-      builder: (context) => Container(
-        decoration: BoxDecoration(
-          color: _getBackgroundColor(),
-          borderRadius: const BorderRadius.vertical(top: Radius.circular(25)),
-        ),
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(
-              'Choose a Sticker',
-              style: GoogleFonts.poppins(
-                fontSize: 20,
-                fontWeight: FontWeight.w600,
-                color: widget.isLightTheme
-                    ? const Color(0xFF5E3A9E)
-                    : Colors.white,
+      builder: (context) => _StickerPickerBottomSheet(
+                        isLightTheme: widget.isLightTheme,
+        onStickerSelected: (emoji) {
+                              setState(() {
+            _stickerAttachments.add(
+              StickerAttachment(
+                emoji: emoji,
+                x: 0.5,
+                y: 0.4,
+                size: 1.0,
+                rotation: 0.0,
               ),
-            ),
-            const SizedBox(height: 20),
-            GridView.builder(
-              shrinkWrap: true,
-              physics: const NeverScrollableScrollPhysics(),
-              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                crossAxisCount: 6,
-                mainAxisSpacing: 12,
-                crossAxisSpacing: 12,
-              ),
-              itemCount: 30,
-              itemBuilder: (context, index) {
-                final stickers = [
-                  '⭐',
-                  '❤️',
-                  '🎉',
-                  '🎈',
-                  '🎁',
-                  '🎊',
-                  '🌟',
-                  '✨',
-                  '💖',
-                  '🌈',
-                  '🔥',
-                  '💯',
-                  '👍',
-                  '👏',
-                  '🙌',
-                  '💪',
-                  '🎯',
-                  '🚀',
-                  '🌺',
-                  '🌸',
-                  '🦋',
-                  '🐝',
-                  '🌻',
-                  '🌼',
-                  '🍀',
-                  '🎵',
-                  '🎶',
-                  '💫',
-                  '⚡',
-                  '🌙',
-                ];
-                return GestureDetector(
-                  onTap: () {
-                    Navigator.pop(context);
-                    setState(() {
-                      _stickerAttachments.add(
-                        StickerAttachment(
-                          emoji: stickers[index],
-                          x: 0.5,
-                          y: 0.4,
-                          size: 1.0,
-                          rotation: 0.0,
-                        ),
-                      );
-                      _selectedTool = null;
-                    });
-                  },
-                  child: Container(
-                    decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(
-                        color: Colors.grey.withValues(alpha: 0.3),
+            );
+            _selectedTool = null;
+                          });
+                        },
                       ),
-                    ),
-                    child: Center(
-                      child: Text(
-                        stickers[index],
-                        style: const TextStyle(fontSize: 32),
-                      ),
-                    ),
-                  ),
-                );
-              },
-            ),
-          ],
-        ),
-      ),
     );
   }
 
@@ -998,113 +975,124 @@ class _NewEntryScreenState extends State<NewEntryScreen>
                 child: Column(
                   children: [
                     _buildHeader(),
-                    Expanded(
-                      child: LayoutBuilder(
-                        builder: (context, constraints) {
-                          return Stack(
-                            children: [
+              Expanded(
+                child: LayoutBuilder(
+                  builder: (context, constraints) {
+                    return Stack(
+                      children: [
                               // Main content (title + Quill editor)
-                              SingleChildScrollView(
+                        SingleChildScrollView(
                                 padding: const EdgeInsets.symmetric(
                                   horizontal: 20,
                                 ),
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
                                     // Title field
-                                    Padding(
+                              Padding(
                                       padding: const EdgeInsets.only(
                                         top: 8,
                                         bottom: 12,
                                       ),
-                                      child: TextField(
-                                        controller: _titleController,
-                                        onTap: () {
-                                          if (_selectedStickerIndex != null) {
+                                child: TextField(
+                                  controller: _titleController,
+                                  onTap: () {
+                                    if (_selectedStickerIndex != null) {
                                             setState(
                                               () =>
                                                   _selectedStickerIndex = null,
                                             );
-                                          }
-                                        },
-                                        style: GoogleFonts.poppins(
-                                          fontSize: 22,
-                                          fontWeight: FontWeight.w700,
-                                          color: widget.isLightTheme
-                                              ? const Color(0xFF5E3A9E)
-                                              : Colors.white,
-                                        ),
-                                        decoration: InputDecoration(
-                                          hintText: 'Title',
-                                          hintStyle: GoogleFonts.poppins(
-                                            fontSize: 22,
-                                            fontWeight: FontWeight.w700,
+                                    }
+                                  },
+                                  style: GoogleFonts.poppins(
+                                    fontSize: 22,
+                                    fontWeight: FontWeight.w700,
+                                    color: widget.isLightTheme
+                                        ? const Color(0xFF5E3A9E)
+                                        : Colors.white,
+                                  ),
+                                  decoration: InputDecoration(
+                                    hintText: 'Title',
+                                    hintStyle: GoogleFonts.poppins(
+                                      fontSize: 22,
+                                      fontWeight: FontWeight.w700,
                                             color:
                                                 (widget.isLightTheme
                                                         ? const Color(
                                                             0xFF5E3A9E,
                                                           )
-                                                        : Colors.white)
-                                                    .withValues(alpha: 0.5),
-                                          ),
-                                          border: InputBorder.none,
-                                          contentPadding: EdgeInsets.zero,
-                                          isDense: true,
-                                        ),
-                                      ),
+                                              : Colors.white)
+                                          .withValues(alpha: 0.5),
                                     ),
+                                    border: InputBorder.none,
+                                    contentPadding: EdgeInsets.zero,
+                                    isDense: true,
+                                  ),
+                                ),
+                              ),
                                     // Quill editor (handles all content)
                                     // Auto-size to content and scroll with parent
-                                    ConstrainedBox(
-                                      constraints: BoxConstraints(
-                                        minHeight: constraints.maxHeight,
-                                      ),
-                                      child: DefaultTextStyle(
-                                        style: GoogleFonts.poppins(
-                                          fontSize: 16,
-                                          color: widget.isLightTheme
-                                              ? const Color(0xFF5E3A9E)
-                                              : Colors.white,
+                                    GestureDetector(
+                                      behavior: HitTestBehavior.translucent,
+                                      onTap: () {
+                                        // Deselect sticker when tapping on editor
+                                        if (_selectedStickerIndex != null) {
+                                          setState(() {
+                                            _selectedStickerIndex = null;
+                                          });
+                                        }
+                                      },
+                                      child: ConstrainedBox(
+                                        constraints: BoxConstraints(
+                                          minHeight: constraints.maxHeight,
                                         ),
-                                        child: quill.QuillEditor.basic(
-                                          controller: _quillController,
-                                          focusNode: _contentFocusNode,
-                                          config: quill.QuillEditorConfig(
-                                            padding: EdgeInsets.only(bottom: 100),
-                                            scrollable: false, // Disable internal scrolling - let parent handle it
-                                            placeholder: 'Start writing...',
-                                            embedBuilders: [
-                                            // Custom image embed with delete button
-                                            ImageEmbedBuilder(
-                                              isLightTheme: widget.isLightTheme,
-                                              onDelete: (imagePath) =>
-                                                  _removeImageEmbed(imagePath),
-                                              onTap: (imagePath) =>
-                                                  _showImageFullScreen(
-                                                    imagePath,
-                                                  ),
-                                            ),
-                                            // Custom video embed with delete button
-                                            VideoEmbedBuilder(
-                                              isLightTheme: widget.isLightTheme,
-                                              onDelete: (videoPath) =>
-                                                  _removeVideoEmbed(videoPath),
-                                              onTap: (videoPath) =>
-                                                  _showVideoFullScreen(
-                                                    videoPath,
-                                                  ),
-                                            ),
-                                            // Audio embed
-                                            AudioEmbedBuilder(
-                                              isLightTheme: widget.isLightTheme,
-                                              onDelete: (audioPath) =>
-                                                  _removeAudioEmbed(audioPath),
-                                            ),
-                                          ],
+                                        child: DefaultTextStyle(
+                                          style: GoogleFonts.poppins(
+                                            fontSize: 16,
+                                            color: widget.isLightTheme
+                                                ? const Color(0xFF5E3A9E)
+                                                : Colors.white,
+                                          ),
+                                          child: quill.QuillEditor.basic(
+                                            controller: _quillController,
+                                            focusNode: _contentFocusNode,
+                                            config: quill.QuillEditorConfig(
+                                              padding: EdgeInsets.only(bottom: 100),
+                                              scrollable: false, // Disable internal scrolling - let parent handle it
+                                              placeholder: 'Start writing...',
+                                              embedBuilders: [
+                                              // Custom image embed with delete button
+                                              ImageEmbedBuilder(
+                                                isLightTheme: widget.isLightTheme,
+                                                onDelete: (imagePath) =>
+                                                    _removeImageEmbed(imagePath),
+                                                onTap: (imagePath) =>
+                                                    _showImageFullScreen(
+                                                      imagePath,
+                                                    ),
+                                              ),
+                                              // Custom video embed with delete button
+                                              VideoEmbedBuilder(
+                                                isLightTheme: widget.isLightTheme,
+                                                onDelete: (videoPath) =>
+                                                    _removeVideoEmbed(videoPath),
+                                                onTap: (videoPath) =>
+                                                    _showVideoFullScreen(
+                                                      videoPath,
+                                                    ),
+                                              ),
+                                              // Audio embed
+                                              AudioEmbedBuilder(
+                                                isLightTheme: widget.isLightTheme,
+                                                onDelete: (audioPath) =>
+                                                    _removeAudioEmbed(audioPath),
+                                              ),
+                              ],
+                            ),
+                          ),
                                         ),
                                       ),
                                     ),
-                                  ),
                                   ],
                                 ),
                               ),
@@ -1112,100 +1100,102 @@ class _NewEntryScreenState extends State<NewEntryScreen>
                               ..._stickerAttachments.asMap().entries.map((
                                 entry,
                               ) {
-                                final index = entry.key;
-                                final sticker = entry.value;
-                                return _DraggableStickerWidget(
-                                  key: ValueKey('sticker_$index'),
-                                  sticker: sticker,
-                                  index: index,
-                                  isLightTheme: widget.isLightTheme,
-                                  isSelected: _selectedStickerIndex == index,
+                          final index = entry.key;
+                          final sticker = entry.value;
+                          return _DraggableStickerWidget(
+                            key: ValueKey('sticker_$index'),
+                            sticker: sticker,
+                            index: index,
+                            isLightTheme: widget.isLightTheme,
+                            isSelected: _selectedStickerIndex == index,
                                   contentWidth: constraints.maxWidth,
                                   contentHeight: constraints.maxHeight,
-                                  onSelect: () {
-                                    FocusScope.of(context).unfocus();
+                            onSelect: () {
+                              FocusScope.of(context).unfocus();
                                     setState(
                                       () => _selectedStickerIndex = index,
                                     );
-                                  },
-                                  onDeselect: () {
+                            },
+                            onDeselect: () {
                                     setState(
                                       () => _selectedStickerIndex = null,
                                     );
-                                  },
-                                  onUpdate: (updatedSticker) {
-                                    setState(() {
+                            },
+                            onUpdate: (updatedSticker) {
+                              setState(() {
                                       _stickerAttachments[index] =
                                           updatedSticker;
-                                    });
-                                  },
-                                  onDelete: () {
-                                    setState(() {
-                                      _stickerAttachments.removeAt(index);
-                                      if (_selectedStickerIndex == index) {
-                                        _selectedStickerIndex = null;
+                              });
+                            },
+                            onDelete: () {
+                              setState(() {
+                                _stickerAttachments.removeAt(index);
+                                if (_selectedStickerIndex == index) {
+                                  _selectedStickerIndex = null;
                                       } else if (_selectedStickerIndex !=
                                               null &&
                                           _selectedStickerIndex! > index) {
                                         _selectedStickerIndex =
                                             _selectedStickerIndex! - 1;
-                                      }
-                                    });
-                                  },
-                                );
-                              }),
-                            ],
+                                }
+                              });
+                            },
                           );
-                        },
-                      ),
-                    ),
-                    _buildBottomToolbar(),
-                  ],
+                        }),
+                      ],
+                    );
+                  },
                 ),
               ),
-              if (_showFormattingToolbar)
-                Positioned(
-                  bottom: 0,
-                  left: 0,
-                  right: 0,
-                  child: EditorToolbar(
-                    controller: _quillController,
+              _buildBottomToolbar(),
+            ],
+          ),
+        ),
+            if (_showFormattingToolbar)
+              Positioned(
+                bottom: 0,
+                left: 0,
+                right: 0,
+                child: EditorToolbar(
+                  controller: _quillController,
                     isLightTheme: widget.isLightTheme,
                     onDone: () =>
                         setState(() => _showFormattingToolbar = false),
-                  ),
-                ),
-              if (_showCalendar)
-                Positioned.fill(
-                  child: GestureDetector(
-                    onTap: () {
-                      FocusScope.of(context).unfocus();
-                      _toggleCalendar();
-                    },
-                    child: Container(
-                      color: Colors.black.withValues(alpha: 0.1),
-                    ),
-                  ),
-                ),
-              if (_showCalendar)
-                Center(
-                  child: FadeTransition(
-                    opacity: _calendarOpacityAnimation,
-                    child: ScaleTransition(
-                      scale: _calendarScaleAnimation,
-                      child: _SoulSyncCalendar(
-                        selectedDate: _selectedDate,
-                        onDateSelected: (date) {
-                          FocusScope.of(context).unfocus();
-                          _selectDate(date);
-                        },
-                        isLightTheme: widget.isLightTheme,
-                      ),
-                    ),
-                  ),
-                ),
-            ],
           ),
+        ),
+            if (_showCalendar)
+              Positioned.fill(
+                child: GestureDetector(
+                  onTap: () {
+                      FocusScope.of(context).unfocus();
+                    _toggleCalendar();
+                  },
+                  child: Container(
+                    color: Colors.black.withValues(alpha: 0.1),
+                  ),
+                ),
+              ),
+            if (_showCalendar)
+              Center(
+                child: FadeTransition(
+                  opacity: _calendarOpacityAnimation,
+                  child: ScaleTransition(
+                    scale: _calendarScaleAnimation,
+                    child: _SoulSyncCalendar(
+                      selectedDate: _selectedDate,
+                      onDateSelected: (date) {
+                          FocusScope.of(context).unfocus();
+                        _selectDate(date);
+                      },
+                      isLightTheme: widget.isLightTheme,
+                    ),
+                  ),
+                ),
+              ),
+            // AI Face Assistant at bottom
+            _buildAIFaceAssistant(),
+          ],
+        ),
         ),
       ),
     );
@@ -1455,15 +1445,15 @@ class _NewEntryScreenState extends State<NewEntryScreen>
         decoration: BoxDecoration(
           color: isSelected
               ? (widget.isLightTheme
-                    ? const Color(0xFF5E3A9E).withValues(alpha: 0.15)
-                    : Colors.white.withValues(alpha: 0.2))
+                  ? const Color(0xFF5E3A9E).withValues(alpha: 0.15)
+                  : Colors.white.withValues(alpha: 0.2))
               : Colors.transparent,
           shape: BoxShape.circle,
           border: Border.all(
             color: isSelected
                 ? (widget.isLightTheme
-                      ? const Color(0xFF5E3A9E).withValues(alpha: 0.3)
-                      : Colors.white.withValues(alpha: 0.3))
+                    ? const Color(0xFF5E3A9E).withValues(alpha: 0.3)
+                    : Colors.white.withValues(alpha: 0.3))
                 : Colors.transparent,
             width: 1.5,
           ),
@@ -1472,6 +1462,355 @@ class _NewEntryScreenState extends State<NewEntryScreen>
           icon,
           size: 22,
           color: widget.isLightTheme ? const Color(0xFF5E3A9E) : Colors.white,
+        ),
+      ),
+    );
+  }
+
+  /// Build AI Face Assistant at bottom of screen
+  Widget _buildAIFaceAssistant() {
+    final bottomPadding = MediaQuery.of(context).viewPadding.bottom;
+    const aiFaceSize = 64.0;
+    
+    return Positioned(
+      bottom: bottomPadding + 80, // Above bottom toolbar
+      right: 20,
+      child: GestureDetector(
+        onTap: _handleAIFaceTap,
+        child: AnimatedBuilder(
+          animation: Listenable.merge([_aiBlinkAnimation, _aiGlowAnimation]),
+          builder: (context, child) {
+            final closedOpacity = _aiIsActive ? 0.0 : _aiBlinkAnimation.value; // No blinking when active
+            final openOpacity = _aiIsActive ? 1.0 : (1.0 - closedOpacity);
+            final glowIntensity = _aiGlowAnimation.value;
+            
+            return Container(
+              width: aiFaceSize,
+              height: aiFaceSize,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                boxShadow: [
+                  BoxShadow(
+                    color: const Color(0x80CBB7F5).withValues(alpha: glowIntensity * (_aiIsActive ? 1.0 : 0.7)),
+                    blurRadius: _aiIsActive ? 25 : 20,
+                    spreadRadius: _aiIsActive ? 5 : 3,
+                  ),
+                ],
+              ),
+              child: ClipOval(
+                child: Stack(
+                  alignment: Alignment.center,
+                  children: [
+                    // Open eyes (base layer)
+                    Opacity(
+                      opacity: openOpacity,
+                      child: Image.asset(
+                        'assets/images/ai_face_open.jpg',
+                        width: aiFaceSize,
+                        height: aiFaceSize,
+                        fit: BoxFit.cover,
+                        errorBuilder: (context, error, stackTrace) {
+                          return Container(
+                            width: aiFaceSize,
+                            height: aiFaceSize,
+                            decoration: const BoxDecoration(
+                              shape: BoxShape.circle,
+                              color: Color(0xFFE8D5FF),
+                            ),
+                            child: const Icon(
+                              Icons.face_outlined,
+                              size: 32,
+                              color: Color(0xFF5E3A9E),
+                            ),
+                          );
+                        },
+                      ),
+                    ),
+                    // Closed eyes (blink layer)
+                    Opacity(
+                      opacity: closedOpacity,
+                      child: Image.asset(
+                        'assets/images/ai_face_closed.jpg',
+                        width: aiFaceSize,
+                        height: aiFaceSize,
+                        fit: BoxFit.cover,
+                        errorBuilder: (context, error, stackTrace) {
+                          return Container(
+                            width: aiFaceSize,
+                            height: aiFaceSize,
+                            decoration: const BoxDecoration(
+                              shape: BoxShape.circle,
+                              color: Color(0xFFE8D5FF),
+                            ),
+                            child: const Icon(
+                              Icons.face_outlined,
+                              size: 32,
+                              color: Color(0xFF5E3A9E),
+                            ),
+                          );
+                        },
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            );
+          },
+        ),
+      ),
+    );
+  }
+
+  /// Handle AI face tap - read diary text and get reflection
+  Future<void> _handleAIFaceTap() async {
+    // Set active state
+    setState(() {
+      _aiIsActive = true;
+    });
+    
+    // Read current diary text
+    final diaryText = _quillController.document.toPlainText().trim();
+    
+    // If empty, show gentle prompt
+    if (diaryText.isEmpty) {
+      setState(() {
+        _aiIsActive = false;
+      });
+      _showAIPromptDialog('Start writing your thoughts, and I\'ll be here to listen and reflect with you 💜');
+      return;
+    }
+    
+    // Don't check backend availability here - let the API call handle it
+    // This prevents false negatives from health check timeouts
+    
+    // Show thinking indicator
+    _showAIThinkingDialog();
+    
+    try {
+      // Call reflection endpoint
+      final reflection = await AIMLApiService().getReflection(diaryText);
+      
+      // Close thinking dialog
+      if (mounted) {
+        Navigator.of(context).pop();
+      }
+      
+      // Show reflection response
+      if (mounted) {
+        _showAIReflectionDialog(reflection);
+      }
+    } catch (e) {
+      debugPrint('🔥 [NEW ENTRY] AI reflection error: $e');
+      
+      // Close thinking dialog
+      if (mounted) {
+        Navigator.of(context).pop();
+      }
+      
+      // Check if it's a connection error
+      final errorString = e.toString().toLowerCase();
+      String errorMessage;
+      
+      if (errorString.contains('connection') || 
+          errorString.contains('network') || 
+          errorString.contains('unavailable') ||
+          errorString.contains('refused') ||
+          errorString.contains('timeout')) {
+        errorMessage = 'I\'m having trouble connecting to the AI server. 💜 Please make sure the backend is running (python run_api.py in ai_engine folder) and try again.';
+      } else {
+        errorMessage = 'I encountered an issue processing your entry. 💜 Please try again.';
+      }
+      
+      // Show error message
+      if (mounted) {
+        _showAIPromptDialog(errorMessage);
+      }
+    } finally {
+      // Reset active state after delay
+      Future.delayed(const Duration(milliseconds: 500), () {
+        if (mounted) {
+          setState(() {
+            _aiIsActive = false;
+          });
+        }
+      });
+    }
+  }
+
+  /// Show AI thinking dialog
+  void _showAIThinkingDialog() {
+    showDialog(
+      context: context,
+      barrierColor: Colors.black.withValues(alpha: 0.3),
+      barrierDismissible: false,
+      builder: (context) => Dialog(
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+        child: Container(
+          padding: const EdgeInsets.all(24),
+          decoration: BoxDecoration(
+            color: widget.isLightTheme ? Colors.white : Colors.grey[900],
+            borderRadius: BorderRadius.circular(20),
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              SizedBox(
+                width: 50,
+                height: 50,
+                child: CircularProgressIndicator(
+                  valueColor: AlwaysStoppedAnimation<Color>(
+                    const Color(0xFF6B4C93),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 16),
+              Text(
+                'Reading your entry...',
+                style: GoogleFonts.poppins(
+                  fontSize: 14,
+                  color: widget.isLightTheme ? const Color(0xFF5E3A9E) : Colors.white,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// Show AI reflection dialog
+  void _showAIReflectionDialog(String reflection) {
+    showDialog(
+      context: context,
+      barrierColor: Colors.black.withValues(alpha: 0.3),
+      builder: (context) => Dialog(
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+        child: Container(
+          constraints: const BoxConstraints(maxWidth: 320),
+          padding: const EdgeInsets.all(24),
+          decoration: BoxDecoration(
+            color: widget.isLightTheme ? Colors.white : Colors.grey[900],
+            borderRadius: BorderRadius.circular(20),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.2),
+                blurRadius: 20,
+                spreadRadius: 5,
+              ),
+            ],
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // AI face icon
+              Container(
+                width: 50,
+                height: 50,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  gradient: LinearGradient(
+                    colors: [
+                      const Color(0xFF6B4C93),
+                      const Color(0xFF8B6FA8),
+                    ],
+                  ),
+                ),
+                child: ClipOval(
+                  child: Image.asset(
+                    'assets/images/ai_face_mouth.jpg',
+                    width: 50,
+                    height: 50,
+                    fit: BoxFit.cover,
+                    errorBuilder: (context, error, stackTrace) {
+                      return const Icon(Icons.face_outlined, color: Colors.white, size: 30);
+                    },
+                  ),
+                ),
+              ),
+              const SizedBox(height: 16),
+              // Reflection text
+              Text(
+                reflection,
+                style: GoogleFonts.poppins(
+                  fontSize: 15,
+                  height: 1.5,
+                  color: widget.isLightTheme ? const Color(0xFF5E3A9E) : Colors.white,
+                ),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 20),
+              // Close button
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(),
+                style: TextButton.styleFrom(
+                  backgroundColor: const Color(0xFF6B4C93).withValues(alpha: 0.1),
+                  padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                ),
+                child: Text(
+                  'Got it',
+                  style: GoogleFonts.poppins(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                    color: const Color(0xFF6B4C93),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// Show AI prompt dialog (for empty text or errors)
+  void _showAIPromptDialog(String message) {
+    showDialog(
+      context: context,
+      barrierColor: Colors.black.withValues(alpha: 0.3),
+      builder: (context) => Dialog(
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+        child: Container(
+          constraints: const BoxConstraints(maxWidth: 280),
+          padding: const EdgeInsets.all(20),
+          decoration: BoxDecoration(
+            color: widget.isLightTheme ? Colors.white : Colors.grey[900],
+            borderRadius: BorderRadius.circular(20),
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                message,
+                style: GoogleFonts.poppins(
+                  fontSize: 14,
+                  height: 1.5,
+                  color: widget.isLightTheme ? const Color(0xFF5E3A9E) : Colors.white,
+                ),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 16),
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(),
+                style: TextButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+                ),
+                child: Text(
+                  'OK',
+                  style: GoogleFonts.poppins(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                    color: const Color(0xFF6B4C93),
+                  ),
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -1528,9 +1867,9 @@ class _GlowAnimationState extends State<_GlowAnimation>
             opacity: _opacityAnimation.value,
             child: Transform.scale(
               scale: _scaleAnimation.value,
-              child: Container(
+            child: Container(
                 padding: const EdgeInsets.all(24),
-                decoration: BoxDecoration(
+              decoration: BoxDecoration(
                   color: Colors.white,
                   shape: BoxShape.circle,
                   boxShadow: [
@@ -1538,16 +1877,16 @@ class _GlowAnimationState extends State<_GlowAnimation>
                       color: Colors.green.withValues(alpha: 0.3),
                       blurRadius: 20,
                       spreadRadius: 10,
-                    ),
-                  ],
-                ),
+                  ),
+                ],
+              ),
                 child: const Icon(
                   Icons.check_rounded,
                   color: Colors.green,
                   size: 48,
-                ),
-              ),
             ),
+          ),
+        ),
           );
         },
       ),
@@ -1576,10 +1915,10 @@ class _EmojiHintBubble extends StatelessWidget {
         scale: scaleAnimation,
         child: GestureDetector(
           onTap: onTap,
-          child: Container(
+            child: Container(
             margin: const EdgeInsets.only(top: 8),
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-            decoration: BoxDecoration(
+              decoration: BoxDecoration(
               color: const Color(0xFF5E3A9E).withValues(alpha: 0.1),
               borderRadius: BorderRadius.circular(12),
               border: Border.all(
@@ -1588,13 +1927,13 @@ class _EmojiHintBubble extends StatelessWidget {
               ),
             ),
             child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
+                mainAxisSize: MainAxisSize.min,
+                children: [
                 const Text('👆', style: TextStyle(fontSize: 16)),
                 const SizedBox(width: 8),
-                Text(
+                  Text(
                   'Tap to select your mood',
-                  style: GoogleFonts.poppins(
+                    style: GoogleFonts.poppins(
                     fontSize: 12,
                     color: const Color(0xFF5E3A9E),
                     fontWeight: FontWeight.w500,
@@ -1638,13 +1977,13 @@ class _SoulSyncCalendarState extends State<_SoulSyncCalendar> {
   }
 
   void _previousMonth() {
-    setState(() {
+          setState(() {
       _viewingMonth = DateTime(_viewingMonth.year, _viewingMonth.month - 1);
     });
   }
 
   void _nextMonth() {
-    setState(() {
+          setState(() {
       _viewingMonth = DateTime(_viewingMonth.year, _viewingMonth.month + 1);
     });
   }
@@ -1694,25 +2033,25 @@ class _SoulSyncCalendarState extends State<_SoulSyncCalendar> {
                         ? const Color(0xFF5E3A9E)
                         : Colors.white,
                   ),
-                  Text(
+                    Text(
                     DateFormat('MMMM yyyy').format(_viewingMonth),
-                    style: GoogleFonts.poppins(
+                      style: GoogleFonts.poppins(
                       fontSize: 18,
                       fontWeight: FontWeight.w600,
-                      color: widget.isLightTheme
-                          ? const Color(0xFF5E3A9E)
-                          : Colors.white,
+                        color: widget.isLightTheme
+                            ? const Color(0xFF5E3A9E)
+                            : Colors.white,
+                      ),
                     ),
-                  ),
                   IconButton(
                     icon: const Icon(Icons.chevron_right_rounded),
                     onPressed: _nextMonth,
                     color: widget.isLightTheme
-                        ? const Color(0xFF5E3A9E)
+                                ? const Color(0xFF5E3A9E)
                         : Colors.white,
-                  ),
-                ],
-              ),
+                    ),
+                  ],
+                ),
               const SizedBox(height: 16),
               GridView.builder(
                 shrinkWrap: true,
@@ -1734,8 +2073,8 @@ class _SoulSyncCalendarState extends State<_SoulSyncCalendar> {
 
                   return GestureDetector(
                     onTap: () => widget.onDateSelected(day),
-                    child: Container(
-                      decoration: BoxDecoration(
+          child: Container(
+            decoration: BoxDecoration(
                         color: isSelected
                             ? const Color(0xFF5E3A9E)
                             : Colors.transparent,
@@ -1818,17 +2157,20 @@ class _DraggableStickerWidgetState extends State<_DraggableStickerWidget> {
   final double _deleteButtonHitboxPadding = 12.0;
 
   double _initialSize = 1.0;
+  double _initialRotation = 0.0;
+  double _initialTwoFingerRotation = 0.0;
+  double _initialTwoFingerDistance = 0.0;
 
   @override
   void initState() {
     super.initState();
     _x = widget.sticker.x.clamp(0.0, 1.0);
     _y = widget.sticker.y.clamp(0.0, 1.0);
-    _size = widget.sticker.size.isFinite
-        ? widget.sticker.size.clamp(_minSize, _maxSize)
+    _size = widget.sticker.size.isFinite 
+        ? widget.sticker.size.clamp(_minSize, _maxSize) 
         : 1.0;
-    _rotation = widget.sticker.rotation.isFinite
-        ? widget.sticker.rotation % 360
+    _rotation = widget.sticker.rotation.isFinite 
+        ? widget.sticker.rotation % 360 
         : 0.0;
     if (_rotation < 0) _rotation += 360;
   }
@@ -1854,11 +2196,11 @@ class _DraggableStickerWidgetState extends State<_DraggableStickerWidget> {
   Widget build(BuildContext context) {
     final contentWidth = widget.contentWidth;
     final contentHeight = widget.contentHeight;
-
+    
     if (contentWidth <= 0 || contentHeight <= 0) {
       return const SizedBox.shrink();
     }
-
+    
     final stickerSize = _baseSize * _size;
     final left = _x * contentWidth - stickerSize / 2;
     final top = _y * contentHeight - stickerSize / 2;
@@ -1866,7 +2208,7 @@ class _DraggableStickerWidgetState extends State<_DraggableStickerWidget> {
     final maxTop = (contentHeight - stickerSize).clamp(0.0, double.infinity);
     final clampedLeft = left.clamp(0.0, maxLeft);
     final clampedTop = top.clamp(0.0, maxTop);
-
+    
     return Positioned(
       left: clampedLeft,
       top: clampedTop,
@@ -1887,72 +2229,137 @@ class _DraggableStickerWidgetState extends State<_DraggableStickerWidget> {
             widget.onSelect();
           }
         },
-        onScaleStart: (details) {
+          onScaleStart: (details) {
           if (_isResizing || _isRotating || _isDeleting) return;
 
-          if (details.pointerCount == 2 && widget.isSelected) {
-            _initialSize = _size;
-            setState(() {
-              _isDragging = false;
-              _isRotating = false;
-            });
-          } else if (details.pointerCount == 1) {
-            if (widget.isSelected) {
-              FocusScope.of(context).unfocus();
-              setState(() => _isDragging = true);
-            } else {
-              widget.onSelect();
-            }
-          }
-        },
-        onScaleUpdate: (details) {
-          if (_isResizing || _isRotating || _isDeleting) return;
-
-          if (details.pointerCount == 2 && widget.isSelected) {
-            final scaleChange = details.scale;
-            final newSize = _initialSize * scaleChange;
-            if (newSize.isFinite) {
+            if (details.pointerCount == 2 && widget.isSelected) {
+              _initialSize = _size;
+              _initialRotation = _rotation;
+              
+            final stickerSize = _baseSize * _size;
+              final focalPoint = details.focalPoint;
+              final localFocalPoint = details.localFocalPoint;
+              final stickerCenter = Offset(stickerSize / 2, stickerSize / 2);
+              final initialVector = focalPoint - (localFocalPoint + stickerCenter);
+              
+              if (initialVector.distance > 0) {
+                _initialTwoFingerRotation = initialVector.direction;
+                _initialTwoFingerDistance = initialVector.distance;
+              } else {
+                _initialTwoFingerDistance = 0.0;
+              }
+              
               setState(() {
-                _size = newSize.clamp(_minSize, _maxSize);
+                _isDragging = false;
+                _isRotating = true;
               });
-              _updateSticker();
+          } else if (details.pointerCount == 1) {
+              if (widget.isSelected) {
+                FocusScope.of(context).unfocus();
+              setState(() => _isDragging = true);
+              } else {
+                widget.onSelect();
+              }
             }
-          } else if (_isDragging && details.pointerCount == 1) {
-            if (contentWidth > 0 && contentHeight > 0) {
-              final deltaX = details.focalPointDelta.dx / contentWidth;
-              final deltaY = details.focalPointDelta.dy / contentHeight;
-
-              if (deltaX.isFinite && deltaY.isFinite) {
-                setState(() {
-                  final newX = _x + deltaX;
-                  final newY = _y + deltaY;
-                  if (newX.isFinite && newY.isFinite) {
-                    _x = newX.clamp(0.0, 1.0);
-                    _y = newY.clamp(0.0, 1.0);
+          },
+          onScaleUpdate: (details) {
+          if (_isResizing || _isRotating || _isDeleting) return;
+            
+            final stickerSize = _baseSize * _size;
+            
+            if (details.pointerCount == 2 && widget.isSelected) {
+              final scaleChange = details.scale;
+              final scaleChangeAbs = (scaleChange - 1.0).abs();
+              
+              // Calculate angle change for rotation detection
+              final focalPoint = details.focalPoint;
+              final localFocalPoint = details.localFocalPoint;
+              final stickerCenter = Offset(stickerSize / 2, stickerSize / 2);
+              final currentVector = focalPoint - (localFocalPoint + stickerCenter);
+              
+              if (currentVector.distance > 0 && _initialTwoFingerDistance > 0) {
+                final currentAngle = currentVector.direction;
+                final angleDelta = (currentAngle - _initialTwoFingerRotation) * 180 / 3.14159;
+                double normalizedAngle = angleDelta;
+                while (normalizedAngle > 180) {
+                  normalizedAngle -= 360;
+                }
+                while (normalizedAngle < -180) {
+                  normalizedAngle += 360;
+                }
+                final normalizedAngleAbs = normalizedAngle.abs();
+                
+                // Check if rotation is more significant than scaling
+                // Use rotation if angle change is significant relative to scale change
+                if (normalizedAngleAbs > 3.0 && normalizedAngleAbs > scaleChangeAbs * 50) {
+                  // Rotation mode - prioritize rotation
+                  if (normalizedAngle.isFinite) {
+                    setState(() {
+                      final newRotation = (_initialRotation + normalizedAngle) % 360;
+                      _rotation = newRotation < 0 ? newRotation + 360 : newRotation;
+                      _isRotating = true;
+                    });
+                    _updateSticker();
                   }
-                });
-                _updateSticker();
+                } else if (scaleChangeAbs > 0.01) {
+                  // Scale mode - prioritize resizing
+                  final newSize = _initialSize * scaleChange;
+                  if (newSize.isFinite) {
+                    setState(() {
+                      _size = newSize.clamp(_minSize, _maxSize);
+                      _isRotating = false;
+                    });
+                    _updateSticker();
+                  }
+                } else if (normalizedAngleAbs > 2.0) {
+                  // Small rotation when scale change is minimal
+                  if (normalizedAngle.isFinite) {
+                    setState(() {
+                      final newRotation = (_initialRotation + normalizedAngle) % 360;
+                      _rotation = newRotation < 0 ? newRotation + 360 : newRotation;
+                      _isRotating = true;
+                    });
+                    _updateSticker();
+                  }
+                }
+              }
+          } else if (_isDragging && details.pointerCount == 1) {
+              if (contentWidth > 0 && contentHeight > 0) {
+                final deltaX = details.focalPointDelta.dx / contentWidth;
+                final deltaY = details.focalPointDelta.dy / contentHeight;
+                
+                if (deltaX.isFinite && deltaY.isFinite) {
+                  setState(() {
+                    final newX = _x + deltaX;
+                    final newY = _y + deltaY;
+                    if (newX.isFinite && newY.isFinite) {
+                      _x = newX.clamp(0.0, 1.0);
+                      _y = newY.clamp(0.0, 1.0);
+                    }
+                  });
+                  _updateSticker();
+                }
               }
             }
-          }
-        },
-        onScaleEnd: (details) {
-          if (!_isResizing && !_isRotating && !_isDeleting) {
-            setState(() {
-              _isDragging = false;
-              if (details.pointerCount == 2) {
-                _isRotating = false;
-              }
-            });
-          }
-        },
-        child: AnimatedScale(
-          scale: _isDragging ? 1.1 : 1.0,
-          duration: const Duration(milliseconds: 150),
-          curve: Curves.easeOut,
-          child: Transform.rotate(
-            angle: _rotation * 3.14159 / 180,
-            child: Container(
+          },
+          onScaleEnd: (details) {
+            if (!_isResizing && !_isRotating && !_isDeleting) {
+              setState(() {
+                _isDragging = false;
+                if (details.pointerCount == 2) {
+                  _isRotating = false;
+                }
+                _initialTwoFingerDistance = 0.0;
+              });
+            }
+          },
+          child: AnimatedScale(
+            scale: _isDragging ? 1.1 : 1.0,
+            duration: const Duration(milliseconds: 150),
+            curve: Curves.easeOut,
+            child: Transform.rotate(
+              angle: _rotation * 3.14159 / 180,
+              child: Container(
               width: stickerSize,
               height: stickerSize,
               decoration: BoxDecoration(
@@ -2041,6 +2448,210 @@ class _DraggableStickerWidgetState extends State<_DraggableStickerWidget> {
             ),
           ),
         ),
+      ),
+    );
+  }
+}
+
+// Sticker Picker Bottom Sheet with Categories
+class _StickerPickerBottomSheet extends StatefulWidget {
+  final bool isLightTheme;
+  final Function(String) onStickerSelected;
+
+  const _StickerPickerBottomSheet({
+    required this.isLightTheme,
+    required this.onStickerSelected,
+  });
+
+  @override
+  State<_StickerPickerBottomSheet> createState() => _StickerPickerBottomSheetState();
+}
+
+class _StickerPickerBottomSheetState extends State<_StickerPickerBottomSheet> {
+  int _selectedCategory = 0;
+
+  // Sticker categories with lots of cute stickers
+  static const Map<String, List<String>> stickerCategories = {
+    'Hearts': [
+      '💜', '❤️', '🧡', '💛', '💚', '💙', '💖', '💗', '💘', '💝', '💞', '💟',
+      '❤️‍🔥', '❤️‍🩹', '💕', '💓', '💔', '❣️', '💌', '🫶', '🤍', '🤎', '🖤', '💋', '👄',
+    ],
+    'Nature': [
+      '🌞', '☁️', '🦋', '🌸', '🌈', '🌙', '⭐', '🪐', '❄️', '🌺', '🌻', '🌷', '🌼', '🌊', '🌿', '🌵', '🌴', '🌾', '🌱', '🌲',
+      '🌍', '🌎', '🌏', '🌤️', '⛅', '🌦️', '🌧️', '⛈️', '🌩️', '🌨️', '☀️', '🌝', '🌚', '🌛', '🌜', '🌑', '🌒', '🌓', '🌔', '🌕', '🌖', '🌗', '🌘',
+      '🍄', '🍀', '🍃', '🍂', '🍁', '🌰', '🌾', '🌽', '🌹', '🌻', '🌷', '🌺', '🌼', '🌸',
+    ],
+    'Animals': [
+      '🦄', '🦢', '🐰', '🦩', '🐱', '🐶', '🐨', '🐼', '🦁', '🐯', '🐸', '🐷',
+      '🐭', '🐹', '🐻', '🐻‍❄️', '🐮', '🐽', '🐊', '🐢', '🦎', '🐍', '🐲', '🐉', '🦕', '🦖',
+      '🐳', '🐋', '🐬', '🐟', '🐠', '🐡', '🦈', '🐙', '🐚', '🐌', '🐛', '🐜', '🐝', '🐞', '🦗', '🕷️', '🦂', '🦟',
+      '🐴', '🦓', '🦌', '🦬', '🐂', '🐃', '🐄', '🐖', '🐗', '🐏', '🐑', '🐐', '🐪', '🐫', '🦙', '🦒', '🐘', '🦣', '🦏', '🦛',
+      '🐁', '🐀', '🐿️', '🦫', '🦔', '🦇', '🦥', '🦦', '🦨', '🦘', '🦡',
+      '🐔', '🐓', '🐣', '🐤', '🐥', '🦆', '🦅', '🦉', '🐺',
+    ],
+    'Objects': [
+      '🧸', '🎈', '🎀', '🎁', '🎂', '🍰', '🍭', '🍬', '🍫', '☕', '🍵', '🌮',
+      '🎪', '🎭', '🎨', '🖼️', '🖌️', '🖍️', '✏️', '✒️', '🖊️', '🖋️', '📝', '💼', '📁', '📂', '🗂️', '📅', '📆', '🗒️', '🗓️',
+      '📇', '📈', '📉', '📊', '📋', '📌', '📍', '📎', '🖇️', '📏', '📐', '✂️', '🗑️', '📦', '📫', '📪', '📬', '📭', '📮', '🗳️',
+      '💌', '💍', '💎', '🔮', '🎉', '🎊', '🎋', '🎍', '🎎', '🎏', '🎐', '🎑', '🧧',
+      '🎆', '🎇', '✨', '🎃', '🎄', '🎅', '🤶', '🧑‍🎄',
+    ],
+    'Symbols': [
+      '💫', '✨', '🌟', '⭐', '💎', '🔮', '🎪', '🎨', '🎭', '🎬', '🎵', '🎶',
+      '☀️', '☄️', '💥', '🔥', '💧', '💦', '☔', '☂️', '⚡', '☃️', '⛄', '🌪️',
+      '☮️', '✝️', '☪️', '🕉️', '☸️', '✡️', '🔯', '🕎', '☯️', '☦️', '🛐', '⛎',
+      '♈', '♉', '♊', '♋', '♌', '♍', '♎', '♏', '♐', '♑', '♒', '♓',
+      '💯', '🔰', '♻️', '✅', '❇️', '✳️', '❎', '🌐', '💠', 'Ⓜ️', '🌀', '💤',
+    ],
+  };
+
+  List<String> get _currentStickers {
+    if (_selectedCategory >= 0 && _selectedCategory < stickerCategories.length) {
+      return stickerCategories.values.elementAt(_selectedCategory);
+    }
+    return stickerCategories.values.first;
+  }
+  
+  List<String> get _categoryNames => stickerCategories.keys.toList();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      height: MediaQuery.of(context).size.height * 0.6,
+      decoration: BoxDecoration(
+        color: widget.isLightTheme
+            ? const Color(0xFFF8F4FF).withValues(alpha: 0.95)
+            : Colors.black.withValues(alpha: 0.9),
+        borderRadius: const BorderRadius.only(
+          topLeft: Radius.circular(24),
+          topRight: Radius.circular(24),
+        ),
+      ),
+          child: Column(
+            children: [
+              // Handle bar
+              Container(
+                margin: const EdgeInsets.only(top: 12),
+                width: 40,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: widget.isLightTheme
+                      ? const Color(0xFF5E3A9E).withValues(alpha: 0.3)
+                      : Colors.white.withValues(alpha: 0.3),
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+              // Title
+              Padding(
+                padding: const EdgeInsets.all(16),
+                child: Text(
+                  'Stickers',
+                  style: GoogleFonts.poppins(
+                    fontSize: 18,
+                    fontWeight: FontWeight.w600,
+                    color: widget.isLightTheme
+                        ? const Color(0xFF5E3A9E)
+                        : Colors.white,
+                  ),
+                ),
+              ),
+              // Category tabs (horizontally scrollable)
+              SizedBox(
+                height: 50,
+                child: ListView.builder(
+                  scrollDirection: Axis.horizontal,
+                  padding: const EdgeInsets.symmetric(horizontal: 12),
+              itemCount: _categoryNames.length,
+                  itemBuilder: (context, index) {
+                    final isSelected = index == _selectedCategory;
+                    return GestureDetector(
+                      onTap: () {
+                        setState(() {
+                          _selectedCategory = index;
+                        });
+                      },
+                      child: Container(
+                        margin: const EdgeInsets.symmetric(horizontal: 4),
+                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                        decoration: BoxDecoration(
+                          color: isSelected
+                              ? (widget.isLightTheme
+                                  ? const Color(0xFF5E3A9E)
+                                  : Colors.white)
+                              : (widget.isLightTheme
+                                  ? Colors.white.withValues(alpha: 0.3)
+                                  : Colors.white.withValues(alpha: 0.1)),
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(
+                            color: isSelected
+                                ? Colors.transparent
+                                : (widget.isLightTheme
+                                    ? const Color(0xFF5E3A9E).withValues(alpha: 0.3)
+                                    : Colors.white.withValues(alpha: 0.3)),
+                            width: 1,
+                          ),
+                        ),
+                        child: Center(
+                          child: Text(
+                        _categoryNames[index],
+                            style: GoogleFonts.poppins(
+                              fontSize: 14,
+                              fontWeight: isSelected ? FontWeight.w600 : FontWeight.w400,
+                              color: isSelected
+                                  ? (widget.isLightTheme ? Colors.white : const Color(0xFF5E3A9E))
+                                  : (widget.isLightTheme
+                                      ? const Color(0xFF5E3A9E)
+                                      : Colors.white),
+                            ),
+                          ),
+                        ),
+                      ),
+                    );
+                  },
+                ),
+              ),
+              const SizedBox(height: 8),
+              // Sticker grid
+              Expanded(
+                child: GridView.builder(
+                  padding: const EdgeInsets.all(16),
+                  gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                    crossAxisCount: 4,
+                    crossAxisSpacing: 12,
+                    mainAxisSpacing: 12,
+                  ),
+                  itemCount: _currentStickers.length,
+                  itemBuilder: (context, index) {
+                    return GestureDetector(
+                  onTap: () {
+                    Navigator.pop(context);
+                    widget.onStickerSelected(_currentStickers[index]);
+                  },
+                      child: Container(
+                        decoration: BoxDecoration(
+                          color: widget.isLightTheme
+                              ? Colors.white.withValues(alpha: 0.5)
+                              : Colors.white.withValues(alpha: 0.1),
+                          borderRadius: BorderRadius.circular(16),
+                          border: Border.all(
+                            color: widget.isLightTheme
+                                ? const Color(0xFF5E3A9E).withValues(alpha: 0.2)
+                                : Colors.white.withValues(alpha: 0.2),
+                            width: 1,
+                          ),
+                        ),
+                        child: Center(
+                          child: Text(
+                            _currentStickers[index],
+                            style: const TextStyle(fontSize: 32),
+                          ),
+                        ),
+                      ),
+                    );
+                  },
+                ),
+              ),
+            ],
       ),
     );
   }
@@ -2209,8 +2820,8 @@ class _AudioRecordingWidgetState extends State<_AudioRecordingWidget> {
                     fontSize: 18,
                     fontWeight: FontWeight.w600,
                     color: widget.isLightTheme
-                        ? const Color(0xFF5E3A9E)
-                        : Colors.white,
+              ? const Color(0xFF5E3A9E)
+              : Colors.white,
                   ),
                 ),
               ),
@@ -2272,7 +2883,7 @@ class _AudioRecordingWidgetState extends State<_AudioRecordingWidget> {
                               Icon(
                                 Icons.folder_rounded,
                                 color: widget.isLightTheme
-                                    ? const Color(0xFF5E3A9E)
+                ? const Color(0xFF5E3A9E)
                                     : Colors.white,
                               ),
                               const SizedBox(width: 8),
@@ -2281,14 +2892,14 @@ class _AudioRecordingWidgetState extends State<_AudioRecordingWidget> {
                                 style: GoogleFonts.poppins(
                                   fontSize: 14,
                                   color: widget.isLightTheme
-                                      ? const Color(0xFF5E3A9E)
-                                      : Colors.white,
-                                ),
+            ? const Color(0xFF5E3A9E)
+            : Colors.white,
+      ),
                               ),
                             ],
-                          ),
-                        ),
-                      ),
+                  ),
+                ),
+              ),
                     ] else ...[
                       Text(
                         _formatDuration(_recordingDuration),
@@ -2303,11 +2914,11 @@ class _AudioRecordingWidgetState extends State<_AudioRecordingWidget> {
                       const SizedBox(height: 24),
                       GestureDetector(
                         onTap: _stopRecording,
-                        child: Container(
-                          width: 80,
-                          height: 80,
+              child: Container(
+                width: 80,
+                height: 80,
                           decoration: const BoxDecoration(
-                            shape: BoxShape.circle,
+                  shape: BoxShape.circle,
                             color: Colors.red,
                           ),
                           child: const Icon(
@@ -2322,10 +2933,10 @@ class _AudioRecordingWidgetState extends State<_AudioRecordingWidget> {
                 ),
               ),
             ],
+              ),
+            ),
           ),
-        ),
-      ),
-    );
+        );
   }
 }
 
@@ -2416,14 +3027,14 @@ class _DrawingCanvasScreenState extends State<_DrawingCanvasScreen> {
   }
 
   void _clearCanvas() {
-    setState(() {
+      setState(() {
       _points.clear();
     });
   }
 
   void _undo() {
     if (_points.isEmpty) return;
-    setState(() {
+      setState(() {
       // Remove points until we hit a null (which marks the end of a stroke)
       do {
         _points.removeLast();
@@ -2447,9 +3058,9 @@ class _DrawingCanvasScreenState extends State<_DrawingCanvasScreen> {
         ),
         title: Text(
           'Draw',
-          style: GoogleFonts.poppins(
+                            style: GoogleFonts.poppins(
             color: widget.isLightTheme ? const Color(0xFF5E3A9E) : Colors.white,
-            fontWeight: FontWeight.w600,
+                              fontWeight: FontWeight.w600,
           ),
         ),
         actions: [
@@ -2470,8 +3081,8 @@ class _DrawingCanvasScreenState extends State<_DrawingCanvasScreen> {
                   : Colors.white,
             ),
             onPressed: _clearCanvas,
-          ),
-          IconButton(
+                    ),
+                    IconButton(
             icon: Icon(
               Icons.check_rounded,
               color: widget.isLightTheme
@@ -2479,19 +3090,19 @@ class _DrawingCanvasScreenState extends State<_DrawingCanvasScreen> {
                   : Colors.white,
             ),
             onPressed: _saveDrawing,
-          ),
-        ],
-      ),
+                    ),
+                  ],
+                ),
       body: Column(
         children: [
           // Color picker
-          Container(
-            padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+                  Container(
+                            padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
             child: Row(
               children: [
                 Text(
                   'Color:',
-                  style: GoogleFonts.poppins(
+                                style: GoogleFonts.poppins(
                     color: widget.isLightTheme
                         ? const Color(0xFF5E3A9E)
                         : Colors.white,
@@ -2516,14 +3127,14 @@ class _DrawingCanvasScreenState extends State<_DrawingCanvasScreen> {
                             Colors.brown,
                             Colors.grey,
                           ].map((color) {
-                            return GestureDetector(
+                        return GestureDetector(
                               onTap: () =>
                                   setState(() => _currentColor = color),
-                              child: Container(
+                          child: Container(
                                 margin: const EdgeInsets.only(right: 8),
                                 width: 36,
                                 height: 36,
-                                decoration: BoxDecoration(
+                            decoration: BoxDecoration(
                                   color: color,
                                   shape: BoxShape.circle,
                                   border: Border.all(
@@ -2531,17 +3142,17 @@ class _DrawingCanvasScreenState extends State<_DrawingCanvasScreen> {
                                         ? (widget.isLightTheme
                                               ? const Color(0xFF5E3A9E)
                                               : Colors.white)
-                                        : Colors.transparent,
+                                  : Colors.transparent,
                                     width: 3,
-                                  ),
-                                ),
                               ),
-                            );
+                            ),
+                          ),
+                        );
                           }).toList(),
                     ),
+                    ),
                   ),
-                ),
-              ],
+                ],
             ),
           ),
           // Stroke width slider
@@ -2551,11 +3162,11 @@ class _DrawingCanvasScreenState extends State<_DrawingCanvasScreen> {
               children: [
                 Text(
                   'Size:',
-                  style: GoogleFonts.poppins(
+                                style: GoogleFonts.poppins(
                     color: widget.isLightTheme
                         ? const Color(0xFF5E3A9E)
                         : Colors.white,
-                    fontWeight: FontWeight.w500,
+                                  fontWeight: FontWeight.w500,
                   ),
                 ),
                 Expanded(
@@ -2574,13 +3185,13 @@ class _DrawingCanvasScreenState extends State<_DrawingCanvasScreen> {
           ),
           // Canvas
           Expanded(
-            child: Container(
+                      child: Container(
               margin: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
+                        decoration: BoxDecoration(
                 color: Colors.white,
                 borderRadius: BorderRadius.circular(12),
                 boxShadow: [
-                  BoxShadow(
+                                  BoxShadow(
                     color: Colors.black.withValues(alpha: 0.1),
                     blurRadius: 10,
                     spreadRadius: 2,
@@ -2627,9 +3238,9 @@ class _DrawingCanvasScreenState extends State<_DrawingCanvasScreen> {
                       painter: _DrawingPainter(_points),
                       child: Container(),
                     ),
-                  ),
-                ),
-              ),
+            ),
+          ),
+        ),
             ),
           ),
         ],
@@ -2718,7 +3329,7 @@ class _AudioPlayerWidgetState extends State<_AudioPlayerWidget> {
     super.initState();
     _audioPlayer.onPlayerStateChanged.listen((state) {
       if (mounted) {
-        setState(() {
+          setState(() {
           _isPlaying = state == PlayerState.playing;
         });
       }
@@ -2738,17 +3349,17 @@ class _AudioPlayerWidgetState extends State<_AudioPlayerWidget> {
       }
     });
   }
-
+  
   @override
   void dispose() {
     _audioPlayer.dispose();
     super.dispose();
   }
-
+  
   Future<void> _togglePlayback() async {
     if (_isPlaying) {
       await _audioPlayer.pause();
-    } else {
+      } else {
       await _audioPlayer.play(DeviceFileSource(widget.audioPath));
     }
   }
@@ -2774,8 +3385,8 @@ class _AudioPlayerWidgetState extends State<_AudioPlayerWidget> {
           child: Container(
             width: audioWidth,
             padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              color: widget.isLightTheme
+      decoration: BoxDecoration(
+        color: widget.isLightTheme
                   ? const Color(0xFFF8F4FF).withValues(alpha: 0.8)
                   : Colors.grey[900]!.withValues(alpha: 0.6),
               borderRadius: BorderRadius.circular(12),
@@ -2797,17 +3408,17 @@ class _AudioPlayerWidgetState extends State<_AudioPlayerWidget> {
               ],
             ),
             child: Row(
-              children: [
+            children: [
                 // Play/Pause button
                 GestureDetector(
                   onTap: _togglePlayback,
                   child: Container(
-                    width: 40,
+                width: 40,
                     height: 40,
-                    decoration: BoxDecoration(
-                      color: widget.isLightTheme
-                          ? const Color(0xFF5E3A9E)
-                          : Colors.white,
+                decoration: BoxDecoration(
+                        color: widget.isLightTheme
+                            ? const Color(0xFF5E3A9E)
+                            : Colors.white,
                       shape: BoxShape.circle,
                     ),
                     child: Icon(
@@ -2823,7 +3434,7 @@ class _AudioPlayerWidgetState extends State<_AudioPlayerWidget> {
                 ),
                 const SizedBox(width: 12),
                 // Audio info and progress
-                Expanded(
+              Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
@@ -2833,21 +3444,21 @@ class _AudioPlayerWidgetState extends State<_AudioPlayerWidget> {
                           fontSize: 14,
                           fontWeight: FontWeight.w500,
                           color: widget.isLightTheme
-                              ? const Color(0xFF5E3A9E)
+                                        ? const Color(0xFF5E3A9E)
                               : Colors.white,
                         ),
                       ),
                       const SizedBox(height: 4),
                       if (_duration.inSeconds > 0)
                         Row(
-                          children: [
-                            Text(
+                                children: [
+                                  Text(
                               _formatDuration(_position),
-                              style: GoogleFonts.poppins(
+                                    style: GoogleFonts.poppins(
                                 fontSize: 11,
                                 color:
                                     (widget.isLightTheme
-                                            ? const Color(0xFF5E3A9E)
+                                              ? const Color(0xFF5E3A9E)
                                             : Colors.white)
                                         .withValues(alpha: 0.6),
                               ),
@@ -2869,33 +3480,33 @@ class _AudioPlayerWidgetState extends State<_AudioPlayerWidget> {
                                     : Colors.white,
                                 inactiveColor:
                                     (widget.isLightTheme
-                                            ? const Color(0xFF5E3A9E)
-                                            : Colors.white)
+                                        ? const Color(0xFF5E3A9E)
+                                        : Colors.white)
                                         .withValues(alpha: 0.3),
                               ),
                             ),
-                            Text(
+                                  Text(
                               _formatDuration(_duration),
-                              style: GoogleFonts.poppins(
+                                    style: GoogleFonts.poppins(
                                 fontSize: 11,
                                 color:
                                     (widget.isLightTheme
-                                            ? const Color(0xFF5E3A9E)
+                                              ? const Color(0xFF5E3A9E)
                                             : Colors.white)
                                         .withValues(alpha: 0.6),
-                              ),
-                            ),
-                          ],
+                                      ),
+                                    ),
+                                ],
                         )
                       else
-                        Text(
+                      Text(
                           'Tap to play',
-                          style: GoogleFonts.poppins(
+                        style: GoogleFonts.poppins(
                             fontSize: 12,
                             color:
                                 (widget.isLightTheme
-                                        ? const Color(0xFF5E3A9E)
-                                        : Colors.white)
+                                            ? const Color(0xFF5E3A9E)
+                                            : Colors.white)
                                     .withValues(alpha: 0.6),
                           ),
                         ),
@@ -2907,9 +3518,9 @@ class _AudioPlayerWidgetState extends State<_AudioPlayerWidget> {
                   onTap: widget.onDelete,
                   child: Container(
                     padding: const EdgeInsets.all(6),
-                    decoration: BoxDecoration(
+                                decoration: BoxDecoration(
                       color: Colors.red.withValues(alpha: 0.9),
-                      shape: BoxShape.circle,
+                                  shape: BoxShape.circle,
                     ),
                     child: const Icon(
                       Icons.close_rounded,
@@ -2974,11 +3585,11 @@ class ImageEmbedBuilder extends quill.EmbedBuilder {
             child: Container(
               width: mediaWidth,
               height: mediaHeight,
-              decoration: BoxDecoration(
+      decoration: BoxDecoration(
                 color: containerColor,
                 borderRadius: BorderRadius.circular(12),
                 border: Border.all(
-                  color: isLightTheme
+        color: isLightTheme
                       ? Colors.black.withValues(alpha: 0.08)
                       : Colors.white.withValues(alpha: 0.12),
                   width: 1.0,
@@ -2997,10 +3608,10 @@ class ImageEmbedBuilder extends quill.EmbedBuilder {
               child: ClipRRect(
                 borderRadius: BorderRadius.circular(12),
                 child: Stack(
-                  children: [
+            children: [
                     // White background for drawings
                     if (isDrawing)
-                      Container(
+              Container(
                         width: mediaWidth,
                         height: mediaHeight,
                         color: Colors.white,
@@ -3017,7 +3628,7 @@ class ImageEmbedBuilder extends quill.EmbedBuilder {
                         errorBuilder: (context, error, stackTrace) => Container(
                           width: mediaWidth,
                           height: mediaHeight,
-                          color: isLightTheme
+                    color: isLightTheme
                               ? Colors.grey.withValues(alpha: 0.2)
                               : Colors.grey.withValues(alpha: 0.4),
                           child: Icon(
@@ -3026,9 +3637,9 @@ class ImageEmbedBuilder extends quill.EmbedBuilder {
                             color: isLightTheme
                                 ? Colors.grey[600]
                                 : Colors.white.withValues(alpha: 0.7),
-                          ),
-                        ),
-                      ),
+                  ),
+                ),
+              ),
                     ),
                     // Delete button
                     Positioned(
@@ -3036,9 +3647,9 @@ class ImageEmbedBuilder extends quill.EmbedBuilder {
                       right: 8,
                       child: GestureDetector(
                         onTap: () => onDelete(imagePath),
-                        child: Container(
+                      child: Container(
                           padding: const EdgeInsets.all(6),
-                          decoration: BoxDecoration(
+                        decoration: BoxDecoration(
                             color: Colors.red.withValues(alpha: 0.9),
                             shape: BoxShape.circle,
                             boxShadow: [
@@ -3055,12 +3666,12 @@ class ImageEmbedBuilder extends quill.EmbedBuilder {
                             size: 18,
                           ),
                         ),
+                              ),
+                            ),
+                          ],
+                        ),
                       ),
-                    ),
-                  ],
                 ),
-              ),
-            ),
           ),
         ),
       ),
@@ -3085,7 +3696,7 @@ class VideoEmbedBuilder extends quill.EmbedBuilder {
 
   @override
   String get key => 'video';
-
+  
   @override
   Widget build(BuildContext context, quill.EmbedContext embedContext) {
     final videoPath = embedContext.node.value.data as String;
@@ -3104,7 +3715,7 @@ class VideoEmbedBuilder extends quill.EmbedBuilder {
             child: Container(
               width: mediaWidth,
               height: mediaHeight,
-              decoration: BoxDecoration(
+      decoration: BoxDecoration(
                 color: isLightTheme
                     ? const Color(0xFFF8F4FF).withValues(alpha: 0.8)
                     : Colors.grey[900]!.withValues(alpha: 0.6),
@@ -3138,11 +3749,11 @@ class VideoEmbedBuilder extends quill.EmbedBuilder {
                     ),
                     // Play icon overlay
                     Positioned.fill(
-                      child: Container(
-                        decoration: BoxDecoration(
+                        child: Container(
+                          decoration: BoxDecoration(
                           color: Colors.black.withValues(alpha: 0.15),
                           borderRadius: BorderRadius.circular(12),
-                        ),
+                          ),
                         child: const Center(
                           child: Icon(
                             Icons.play_circle_filled_rounded,
@@ -3176,9 +3787,9 @@ class VideoEmbedBuilder extends quill.EmbedBuilder {
                             color: Colors.white,
                             size: 18,
                           ),
+                          ),
                         ),
                       ),
-                    ),
                   ],
                 ),
               ),
@@ -3206,7 +3817,7 @@ class _VideoThumbnailWidget extends StatefulWidget {
 class _VideoThumbnailWidgetState extends State<_VideoThumbnailWidget> {
   File? _thumbnailFile;
   bool _isLoading = true;
-
+  
   @override
   void initState() {
     super.initState();
@@ -3314,7 +3925,7 @@ class _VideoPlayerWidgetState extends State<_VideoPlayerWidget> {
         // Local file path
         final file = File(videoPath);
         if (!await file.exists()) {
-          setState(() {
+    setState(() {
             _hasError = true;
             _errorMessage = 'Video file not found';
           });
@@ -3326,7 +3937,7 @@ class _VideoPlayerWidgetState extends State<_VideoPlayerWidget> {
       await _controller!.initialize();
 
       if (mounted) {
-        setState(() {
+      setState(() {
           _isInitialized = true;
         });
         _controller!.play();
@@ -3334,7 +3945,7 @@ class _VideoPlayerWidgetState extends State<_VideoPlayerWidget> {
     } catch (e) {
       debugPrint('🔥 [VIDEO PLAYER ERROR] Failed to initialize video: $e');
       if (mounted) {
-        setState(() {
+    setState(() {
           _hasError = true;
           _errorMessage = 'Failed to load video: ${e.toString()}';
         });
@@ -3354,18 +3965,18 @@ class _VideoPlayerWidgetState extends State<_VideoPlayerWidget> {
       return Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
-          children: [
+        children: [
             const Icon(Icons.error_outline, color: Colors.white, size: 48),
             const SizedBox(height: 16),
             Text(
               _errorMessage ?? 'Error loading video',
               style: const TextStyle(color: Colors.white),
               textAlign: TextAlign.center,
-            ),
-          ],
-        ),
-      );
-    }
+          ),
+        ],
+      ),
+    );
+  }
 
     if (!_isInitialized || _controller == null) {
       return const Center(

@@ -15,6 +15,7 @@ import 'package:soulsync_dairyapp/models/diary_entry.dart';
 import 'package:soulsync_dairyapp/screens/settings_page.dart';
 import 'package:soulsync_dairyapp/screens/my_profile_screen.dart';
 import 'package:soulsync_dairyapp/screens/auth/auth_screen.dart';
+import 'package:soulsync_dairyapp/utils/theme_utils.dart';
 
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
@@ -406,23 +407,28 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
     final isLightTheme = Theme.of(context).brightness == Brightness.light;
 
     return Scaffold(
-      body: Container(
+      body: FutureBuilder<Color>(
+        future: ThemeUtils.getLighterBackgroundColor(context),
+        builder: (context, snapshot) {
+          final backgroundColor = snapshot.data ?? 
+              (isLightTheme 
+                  ? const Color(0xFFDDEBFF) 
+                  : const Color(0xFF16213E));
+          
+          return Container(
         decoration: BoxDecoration(
-          gradient: LinearGradient(
+              gradient: isLightTheme
+                  ? LinearGradient(
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
-            colors: isLightTheme
-                ? [
+                      colors: [
                     const Color(0xFFF8E7FF), // Soft purple-pink
                     const Color(0xFFE8D5FF), // Light purple
                     const Color(0xFFDDEBFF), // Soft blue
-                  ]
-                : [
-                    const Color(0xFF2D1B3D),
-                    const Color(0xFF1A1A2E),
-                    const Color(0xFF16213E),
                   ],
-          ),
+                    )
+                  : null, // For dark themes, use solid color
+              color: isLightTheme ? null : backgroundColor, // Use lighter background for dark themes
         ),
         child: SafeArea(
           child: _isLoading
@@ -509,6 +515,8 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
                   ),
                 ),
         ),
+        );
+      },
       ),
     );
   }
@@ -1173,14 +1181,18 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
                         Icon(
                           Icons.bar_chart_outlined,
                           size: 48,
-                          color: const Color(0xFF5E3A9E).withValues(alpha: 0.3),
+                          color: isLightTheme
+                              ? const Color(0xFF5E3A9E).withValues(alpha: 0.3)
+                              : Colors.white.withValues(alpha: 0.3),
                         ),
                         const SizedBox(height: 12),
                         Text(
                           'No mood data available',
                           style: GoogleFonts.poppins(
                             fontSize: 14,
-                            color: const Color(0xFF5E3A9E).withValues(alpha: 0.6),
+                            color: isLightTheme
+                                ? const Color(0xFF5E3A9E).withValues(alpha: 0.6)
+                                : Colors.white.withValues(alpha: 0.6),
                           ),
                         ),
                       ],
@@ -1216,7 +1228,9 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
                                     moods[value.toInt()],
                                     style: GoogleFonts.poppins(
                                       fontSize: 10,
-                                      color: const Color(0xFF5E3A9E).withValues(alpha: 0.7),
+                                      color: isLightTheme
+                                          ? const Color(0xFF5E3A9E).withValues(alpha: 0.7)
+                                          : Colors.white.withValues(alpha: 0.7),
                                     ),
                                   ),
                                 );
@@ -1234,7 +1248,9 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
                                 value.toInt().toString(),
                                 style: GoogleFonts.poppins(
                                   fontSize: 10,
-                                  color: const Color(0xFF5E3A9E).withValues(alpha: 0.7),
+                                  color: isLightTheme
+                                      ? const Color(0xFF5E3A9E).withValues(alpha: 0.7)
+                                      : Colors.white.withValues(alpha: 0.7),
                                 ),
                               );
                             },
@@ -1253,7 +1269,9 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
                         drawVerticalLine: false,
                         getDrawingHorizontalLine: (value) {
                           return FlLine(
-                            color: const Color(0xFF5E3A9E).withValues(alpha: 0.1),
+                            color: isLightTheme
+                                ? const Color(0xFF5E3A9E).withValues(alpha: 0.1)
+                                : Colors.white.withValues(alpha: 0.1),
                             strokeWidth: 1,
                           );
                         },

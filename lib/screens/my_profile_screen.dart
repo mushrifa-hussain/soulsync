@@ -14,7 +14,6 @@ class MyProfileScreen extends StatefulWidget {
 }
 
 class _MyProfileScreenState extends State<MyProfileScreen> {
-  String? _displayName;
   String? _email;
   String? _photoUrl;
   String? _username;
@@ -43,7 +42,6 @@ class _MyProfileScreenState extends State<MyProfileScreen> {
       _isLoading = true;
     });
 
-    _displayName = ProfileService.getDisplayName();
     _email = ProfileService.getEmail();
     _photoUrl = ProfileService.getPhotoUrl();
     _username = await ProfileService.getUsername();

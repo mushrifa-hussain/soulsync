@@ -170,19 +170,23 @@ export const geminiChat = functions.https.onCall(async (data, context) => {
       parts: [{ text: msg.text }],
     }));
 
-    // System instruction for AI personality
-    const systemInstruction = `You are SoulSync AI, a warm, empathetic, and supportive emotional companion. 
-Your role is to:
-- Listen actively and provide emotional support
-- Help users reflect on their feelings and experiences
-- Use encouraging, gentle, and positive language
-- Avoid harsh or judgmental words
-- Be a supportive friend who helps with self-reflection
-- Use emojis sparingly and naturally (💜, ✨, 🌟)
-- Keep responses conversational and personal
-- Focus on emotional well-being and growth
+    // System instruction for AI personality - SIMPLE AND DIRECT
+    const systemInstruction = `You are SoulSync AI - a friendly friend who texts like a real person.
 
-Be genuine, caring, and understanding. Help users process their emotions in a healthy way.`;
+    MANDATORY RULES - NO EXCEPTIONS:
+    1. EVERY message MUST have 6-10 emojis. Put them throughout the message, not just at the end.
+    2. NEVER use asterisks (** or *). NO bold, NO markdown. Just plain text with emojis.
+    3. Keep messages SHORT - maximum 2-3 sentences. Like a text message.
+    4. Be friendly and supportive.
+
+    GOOD: "Hey! 💜 I'm sorry you're not feeling well. 🌸 That really sucks! ✨ What's going on? I'm here for you. 💖"
+    
+    BAD - DO NOT DO THIS:
+    - Messages without emojis
+    - Using ** or * asterisks anywhere
+    - Long paragraphs or multiple sentences
+
+    Format: Short text + lots of emojis + no asterisks. Always.`;
 
     // Start chat with history and system instruction
     const chat = model.startChat({
@@ -192,7 +196,7 @@ Be genuine, caring, and understanding. Help users process their emotions in a he
         temperature: 0.7,
         topK: 40,
         topP: 0.95,
-        maxOutputTokens: 1024,
+        maxOutputTokens: 512,
       },
     });
 
@@ -334,22 +338,38 @@ Please provide a summary that feels like a personal diary entry reflecting on th
     const response = result.response;
     const summary = response.text();
 
+    if (!summary || summary.trim().length === 0) {
+      throw new functions.https.HttpsError(
+        'internal',
+        'Summary generation returned empty result'
+      );
+    }
+
     return { summary: summary.trim() };
   } catch (error: any) {
     console.error('Error in geminiSummarize:', error);
+    console.error('Error details:', JSON.stringify(error, null, 2));
 
     // Handle specific Gemini API errors
-    if (error.message?.includes('API key')) {
+    if (error.message?.includes('API key') || error.message?.includes('GEMINI_API_KEY')) {
       throw new functions.https.HttpsError(
         'failed-precondition',
         'Invalid Gemini API key. Please check your configuration.'
       );
     }
 
+    // Handle timeout errors
+    if (error.message?.includes('timeout') || error.message?.includes('timed out')) {
+      throw new functions.https.HttpsError(
+        'deadline-exceeded',
+        'Summary generation timed out. Please try again.'
+      );
+    }
+
     throw new functions.https.HttpsError(
       'internal',
       'Failed to generate summary',
-      error.message
+      error.message || 'Unknown error occurred'
     );
   }
 });

@@ -577,9 +577,13 @@ class _ProfileOverviewPageState extends State<ProfileOverviewPage>
             textAlign: TextAlign.center,
           ),
           const SizedBox(height: 8),
-          Text(
+          FittedBox(
+            fit: BoxFit.scaleDown,
+            child: Text(
             emoji,
             style: const TextStyle(fontSize: 24),
+              softWrap: false,
+            ),
           ),
           const SizedBox(height: 4),
           Text(
@@ -593,6 +597,7 @@ class _ProfileOverviewPageState extends State<ProfileOverviewPage>
             textAlign: TextAlign.center,
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
+            softWrap: false,
           ),
         ],
       ),

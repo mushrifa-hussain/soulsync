@@ -51,7 +51,7 @@ dependencies:
   audioplayers: ^6.1.0
   flutter_colorpicker: ^1.0.3
   file_picker: ^10.3.6
-  share_plus: ^10.1.2
+  share_plus: ^10.1.4
   flutter_secure_storage: ^9.0.0
   flutter_local_notifications: ^19.5.0
   timezone: ^0.10.1
@@ -64,6 +64,7 @@ dependencies:
   hive_flutter: ^1.1.0
   cloud_functions: ^6.0.0
   url_launcher: ^6.3.1
+  http: ^1.1.0
 
 dependency_overrides:
   record_linux: ^1.2.1
@@ -98,6 +99,7 @@ flutter:
     - assets/themes/
     - assets/images/ai_face_open.jpg
     - assets/images/ai_face_closed.jpg
+    - assets/images/ai_face_mouth.jpg
 
   # An image asset can refer to one or more resolution-specific "variants", see
   # https://flutter.dev/to/resolution-aware-images

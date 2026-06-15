@@ -13,7 +13,7 @@ class Reminder {
     this.enabled = true, // Default to enabled
   });
 
-  // Convert to JSON for storage
+  // Convert to JSON for storageb
   Map<String, dynamic> toJson() {
     return {
       'id': id,
@@ -31,7 +31,9 @@ class Reminder {
       title: json['title'] as String,
       dateTime: DateTime.parse(json['dateTime'] as String),
       notificationId: json['notificationId'] as int,
-      enabled: json['enabled'] as bool? ?? true, // Default to true for backward compatibility
+      enabled:
+          json['enabled'] as bool? ??
+          true, // Default to true for backward compatibility
     );
   }
 
@@ -52,4 +54,3 @@ class Reminder {
     );
   }
 }
-

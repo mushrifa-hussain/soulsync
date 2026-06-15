@@ -4,12 +4,12 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:flutter_colorpicker/flutter_colorpicker.dart';
 
 /// Persistent formatting toolbar for the Quill editor
-///
+/// 
 /// This toolbar stays visible while the editor is active and allows users to:
 /// - Apply multiple formatting options before committing
 /// - Preview changes in real-time
 /// - Commit all changes with the Done button
-///
+/// 
 /// Usage:
 /// ```dart
 /// EditorToolbar(
@@ -108,24 +108,24 @@ class _EditorToolbarState extends State<EditorToolbar> {
                 : quill.Attribute.underline,
           );
           break;
-        case 'strike':
+      case 'strike':
           final isStrike = _hasAttribute('strike');
           widget.controller.formatSelection(
             isStrike
                 ? quill.Attribute.clone(quill.Attribute.strikeThrough, null)
                 : quill.Attribute.strikeThrough,
           );
-          break;
-        case 'color':
-          if (value is Color) {
+        break;
+      case 'color':
+        if (value is Color) {
             // Convert color to hex string for Quill
             final hexColor =
                 '#${value.value.toRadixString(16).padLeft(8, '0').substring(2)}';
             widget.controller.formatSelection(
               quill.Attribute.fromKeyValue('color', hexColor),
             );
-          }
-          break;
+        }
+        break;
         case 'size':
           if (value is String) {
             // Remove existing headers first
@@ -352,16 +352,16 @@ class _EditorToolbarState extends State<EditorToolbar> {
             bottom: 8,
           ),
           child: Row(
-            children: [
+          children: [
               // Fixed close button
-              Container(
+            Container(
                 padding: const EdgeInsets.only(left: 12),
                 child: IconButton(
                   onPressed: _commitChanges,
                   icon: Icon(
                     Icons.close_rounded,
                     color: isLightTheme ? colorScheme.primary : Colors.white,
-                  ),
+              ),
                   tooltip: 'Close',
                   style: IconButton.styleFrom(
                     backgroundColor: isLightTheme
@@ -377,43 +377,43 @@ class _EditorToolbarState extends State<EditorToolbar> {
                   scrollDirection: Axis.horizontal,
                   padding: const EdgeInsets.only(left: 6),
                   child: Row(
-                    children: [
+      children: [
                       // Text styles
-                      _buildToggleButton(
-                        icon: Icons.format_bold,
-                        tooltip: 'Bold',
-                        isActive: _hasAttribute('bold'),
-                        onTap: () => _applyFormatPreview('bold', true),
-                        colorScheme: colorScheme,
-                        isLightTheme: isLightTheme,
-                      ),
+        _buildToggleButton(
+          icon: Icons.format_bold,
+          tooltip: 'Bold',
+          isActive: _hasAttribute('bold'),
+          onTap: () => _applyFormatPreview('bold', true),
+          colorScheme: colorScheme,
+          isLightTheme: isLightTheme,
+        ),
                       const SizedBox(width: 8),
-                      _buildToggleButton(
-                        icon: Icons.format_italic,
-                        tooltip: 'Italic',
-                        isActive: _hasAttribute('italic'),
-                        onTap: () => _applyFormatPreview('italic', true),
-                        colorScheme: colorScheme,
-                        isLightTheme: isLightTheme,
-                      ),
+        _buildToggleButton(
+          icon: Icons.format_italic,
+          tooltip: 'Italic',
+          isActive: _hasAttribute('italic'),
+          onTap: () => _applyFormatPreview('italic', true),
+          colorScheme: colorScheme,
+          isLightTheme: isLightTheme,
+        ),
                       const SizedBox(width: 8),
-                      _buildToggleButton(
-                        icon: Icons.format_underlined,
-                        tooltip: 'Underline',
-                        isActive: _hasAttribute('underline'),
-                        onTap: () => _applyFormatPreview('underline', true),
-                        colorScheme: colorScheme,
-                        isLightTheme: isLightTheme,
-                      ),
+        _buildToggleButton(
+          icon: Icons.format_underlined,
+          tooltip: 'Underline',
+          isActive: _hasAttribute('underline'),
+          onTap: () => _applyFormatPreview('underline', true),
+          colorScheme: colorScheme,
+          isLightTheme: isLightTheme,
+        ),
                       const SizedBox(width: 8),
-                      _buildToggleButton(
-                        icon: Icons.strikethrough_s,
-                        tooltip: 'Strikethrough',
-                        isActive: _hasAttribute('strike'),
-                        onTap: () => _applyFormatPreview('strike', true),
-                        colorScheme: colorScheme,
-                        isLightTheme: isLightTheme,
-                      ),
+        _buildToggleButton(
+          icon: Icons.strikethrough_s,
+          tooltip: 'Strikethrough',
+          isActive: _hasAttribute('strike'),
+          onTap: () => _applyFormatPreview('strike', true),
+          colorScheme: colorScheme,
+          isLightTheme: isLightTheme,
+        ),
                       const SizedBox(width: 16),
                       // Divider
                       Container(
@@ -527,7 +527,7 @@ class _EditorToolbarState extends State<EditorToolbar> {
               : null,
           colorScheme: colorScheme,
           isLightTheme: isLightTheme,
-        ),
+          ),
       ],
     );
   }
@@ -625,7 +625,7 @@ class _EditorToolbarState extends State<EditorToolbar> {
 
   Widget _buildFontSizeButton(ColorScheme colorScheme, bool isLightTheme) {
     final currentSize = _getCurrentFontSize();
-
+    
     return PopupMenuButton<String>(
       tooltip: 'Font Size',
       child: Container(
@@ -711,7 +711,7 @@ class _EditorToolbarState extends State<EditorToolbar> {
 
   void _showColorPickerDialog(Color currentColor) {
     Color selectedColor = currentColor;
-
+    
     showDialog(
       context: context,
       barrierDismissible: true,

@@ -293,6 +293,7 @@ class _PersonalizationScreenState extends State<PersonalizationScreen> {
               ThemeSelectionPage(
                 initialBackgroundColor: _firstThemeBackgroundColor,
                 initialDotColor: _firstThemeDotColor,
+                isFirstTime: true, // This is the first time selecting theme
               ),
           transitionsBuilder: (context, animation, secondaryAnimation, child) {
             // Return child immediately without any opacity animation

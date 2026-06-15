@@ -1,14 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
-import 'package:intl/intl.dart';
 import 'package:soulsync_dairyapp/providers/ai_chat_provider.dart';
-import 'package:soulsync_dairyapp/providers/diary_entries_provider.dart';
 import 'package:soulsync_dairyapp/widgets/ai_chat_bubble.dart';
 import 'package:soulsync_dairyapp/widgets/typing_indicator.dart';
 import 'package:soulsync_dairyapp/widgets/theme_background_wrapper.dart';
 import 'package:soulsync_dairyapp/utils/theme_utils.dart';
-import 'package:soulsync_dairyapp/models/diary_entry.dart';
+import 'package:soulsync_dairyapp/services/aiml_api_service.dart';
+import 'package:soulsync_dairyapp/screens/new_entry_screen.dart';
+import 'package:soulsync_dairyapp/services/theme_storage_service.dart';
 
 class AIChatPage extends StatefulWidget {
   const AIChatPage({super.key});
@@ -108,182 +108,6 @@ class _AIChatPageState extends State<AIChatPage>
     _scrollToBottom();
   }
 
-  Future<void> _generateSummary() async {
-    final chatProvider = Provider.of<AIChatProvider>(context, listen: false);
-    final diaryProvider = Provider.of<DiaryEntriesProvider>(context, listen: false);
-
-    // Show loading dialog
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (context) => const Center(
-        child: CircularProgressIndicator(
-          valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF6B4C93)),
-        ),
-      ),
-    );
-
-    try {
-      final summary = await chatProvider.generateSummary();
-      
-      if (!mounted) return;
-      Navigator.pop(context); // Close loading dialog
-
-      if (summary == null || summary.isEmpty) {
-        _showErrorDialog('Failed to generate summary. Please try again.');
-        return;
-      }
-
-      // Create diary entry from summary
-      final now = DateTime.now();
-      final entry = DiaryEntry(
-        id: DateTime.now().millisecondsSinceEpoch.toString(),
-        date: DateFormat('yyyy-MM-dd').format(now),
-        title: 'AI Conversation Summary',
-        content: summary,
-        mood: '🤔',
-        timestamp: now,
-      );
-
-      await diaryProvider.saveEntry(entry);
-
-      if (!mounted) return;
-
-      // Clear chat history after successful summary
-      await chatProvider.clearChat();
-
-      // Show success animation
-      _showSuccessDialog(() {
-        Navigator.of(context).popUntil((route) => route.isFirst);
-      });
-    } catch (e) {
-      if (!mounted) return;
-      Navigator.pop(context); // Close loading dialog
-      _showErrorDialog('Error saving summary: $e');
-    }
-  }
-
-  void _showSuccessDialog(VoidCallback onComplete) {
-    showDialog(
-      context: context,
-      barrierColor: Colors.black.withValues(alpha: 0.5),
-      builder: (context) => Dialog(
-        backgroundColor: Colors.transparent,
-        child: Container(
-          padding: const EdgeInsets.all(32),
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(24),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withValues(alpha: 0.2),
-                blurRadius: 20,
-                spreadRadius: 5,
-              ),
-            ],
-          ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Container(
-                width: 80,
-                height: 80,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  gradient: LinearGradient(
-                    colors: [
-                      const Color(0xFF6B4C93),
-                      const Color(0xFF8B6FA8),
-                    ],
-                  ),
-                ),
-                child: const Icon(
-                  Icons.check_rounded,
-                  color: Colors.white,
-                  size: 40,
-                ),
-              ),
-              const SizedBox(height: 24),
-              Text(
-                'Summary Saved! ✨',
-                style: GoogleFonts.poppins(
-                  fontSize: 22,
-                  fontWeight: FontWeight.w600,
-                  color: const Color(0xFF5E3A9E),
-                ),
-              ),
-              const SizedBox(height: 12),
-              Text(
-                'Your conversation has been saved as a diary entry.',
-                textAlign: TextAlign.center,
-                style: GoogleFonts.poppins(
-                  fontSize: 14,
-                  color: Colors.grey.shade700,
-                ),
-              ),
-              const SizedBox(height: 24),
-              ElevatedButton(
-                onPressed: onComplete,
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFF6B4C93),
-                  foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 32,
-                    vertical: 14,
-                  ),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(20),
-                  ),
-                ),
-                child: Text(
-                  'Go to Home',
-                  style: GoogleFonts.poppins(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  void _showErrorDialog(String message) {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(20),
-        ),
-        title: Text(
-          'Error',
-          style: GoogleFonts.poppins(
-            fontWeight: FontWeight.w600,
-            color: const Color(0xFF5E3A9E),
-          ),
-        ),
-        content: Text(
-          message,
-          style: GoogleFonts.poppins(),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: Text(
-              'OK',
-              style: GoogleFonts.poppins(
-                color: const Color(0xFF6B4C93),
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     final isLightTheme = Theme.of(context).brightness == Brightness.light;
@@ -300,7 +124,7 @@ class _AIChatPageState extends State<AIChatPage>
   Widget _buildContent(BuildContext context, bool isLightTheme, bool isDarkTheme) {
     return PopScope(
       canPop: true,
-      onPopInvoked: (didPop) async {
+      onPopInvokedWithResult: (didPop, result) async {
         if (didPop) return;
         // Clear chat history when user presses back
         final provider = Provider.of<AIChatProvider>(context, listen: false);
@@ -377,62 +201,6 @@ class _AIChatPageState extends State<AIChatPage>
                       ),
                     ),
 
-                    // Summary Button (only after 3 user messages, hide when keyboard is visible)
-                    LayoutBuilder(
-                      builder: (context, constraints) {
-                        final keyboardHeight = MediaQuery.of(context).viewInsets.bottom;
-                        final isKeyboardVisible = keyboardHeight > 0;
-                        
-                        if (isKeyboardVisible) {
-                          return const SizedBox.shrink();
-                        }
-                        
-                        return Consumer<AIChatProvider>(
-                          builder: (context, provider, child) {
-                            if (provider.userMessageCount < 3) {
-                              return const SizedBox.shrink();
-                            }
-
-                            return Padding(
-                              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                              child: ElevatedButton.icon(
-                                onPressed: provider.isLoading ? null : _generateSummary,
-                                icon: provider.isLoading
-                                    ? const SizedBox(
-                                        width: 16,
-                                        height: 16,
-                                        child: CircularProgressIndicator(
-                                          strokeWidth: 2,
-                                          valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-                                        ),
-                                      )
-                                    : const Icon(Icons.book_outlined, size: 18),
-                                label: Text(
-                                  'Summarize into Diary Entry',
-                                  style: GoogleFonts.poppins(
-                                    fontSize: 14,
-                                    fontWeight: FontWeight.w600,
-                                  ),
-                                ),
-                                style: ElevatedButton.styleFrom(
-                                  backgroundColor: const Color(0xFF6B4C93),
-                                  foregroundColor: Colors.white,
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 20,
-                                    vertical: 12,
-                                  ),
-                                  shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(20),
-                                  ),
-                                  elevation: 4,
-                                ),
-                              ),
-                            );
-                          },
-                        );
-                      },
-                    ),
-
                     // Input Bar - positioned directly above keyboard
                     _buildInputBar(isLightTheme, isDarkTheme),
                   ],
@@ -497,10 +265,21 @@ class _AIChatPageState extends State<AIChatPage>
                 ),
               ],
             ),
-            child: const Icon(
-              Icons.psychology_rounded,
-              color: Colors.white,
-              size: 22,
+            child: ClipOval(
+              child: Image.asset(
+                'assets/images/ai_face_mouth.jpg',
+                width: 40,
+                height: 40,
+                fit: BoxFit.cover,
+                errorBuilder: (context, error, stackTrace) {
+                  return Container(
+                    width: 40,
+                    height: 40,
+                    color: Colors.grey,
+                    child: const Icon(Icons.error, color: Colors.white, size: 20),
+                  );
+                },
+              ),
             ),
           ),
           const SizedBox(width: 12),
@@ -559,10 +338,21 @@ class _AIChatPageState extends State<AIChatPage>
                   ),
                 ],
               ),
-              child: const Icon(
-                Icons.psychology_rounded,
-                color: Colors.white,
-                size: 50,
+              child: ClipOval(
+                child: Image.asset(
+                  'assets/images/ai_face_mouth.jpg',
+                  width: 100,
+                  height: 100,
+                  fit: BoxFit.cover,
+                  errorBuilder: (context, error, stackTrace) {
+                    return Container(
+                      width: 100,
+                      height: 100,
+                      color: Colors.grey,
+                      child: const Icon(Icons.error, color: Colors.white, size: 50),
+                    );
+                  },
+                ),
               ),
             ),
             const SizedBox(height: 24),
@@ -593,122 +383,319 @@ class _AIChatPageState extends State<AIChatPage>
   }
 
   Widget _buildInputBar(bool isLightTheme, bool isDarkTheme) {
-    return Container(
-      padding: const EdgeInsets.symmetric(
-        horizontal: 16,
-        vertical: 12,
-      ),
-      decoration: BoxDecoration(
-        color: isDarkTheme
-            ? Colors.white.withValues(alpha: 0.1)
-            : Colors.white.withValues(alpha: 0.9),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: isDarkTheme ? 0.2 : 0.05),
-            blurRadius: 10,
-            offset: const Offset(0, -2),
-          ),
-        ],
-      ),
-      child: Row(
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
         children: [
-          Expanded(
-            child: Container(
-              decoration: BoxDecoration(
-                color: isDarkTheme
-                    ? Colors.white.withValues(alpha: 0.15)
-                    : Colors.white,
-                borderRadius: BorderRadius.circular(24),
-                border: Border.all(
-                  color: _isInputFocused
-                      ? const Color(0xFF6B4C93)
-                      : (isDarkTheme
-                          ? Colors.white.withValues(alpha: 0.2)
-                          : const Color(0xFF6B4C93).withValues(alpha: 0.2)),
-                  width: _isInputFocused ? 2 : 1,
-                ),
-                boxShadow: _isInputFocused
-                    ? [
-                        BoxShadow(
-                          color: const Color(0xFF6B4C93).withValues(alpha: 0.3),
-                          blurRadius: 12,
-                          spreadRadius: 2,
-                        ),
-                      ]
-                    : null,
-              ),
-              child: TextField(
-                controller: _messageController,
-                focusNode: _focusNode,
-                maxLines: null,
-                textInputAction: TextInputAction.send,
-                onSubmitted: (_) => _sendMessage(),
-                style: GoogleFonts.poppins(
-                  fontSize: 15,
-                  color: isDarkTheme ? Colors.white : const Color(0xFF5E3A9E),
-                ),
-                decoration: InputDecoration(
-                  hintText: 'Type your message...',
-                  hintStyle: GoogleFonts.poppins(
-                    fontSize: 15,
-                    color: isDarkTheme
-                        ? Colors.white.withValues(alpha: 0.5)
-                        : const Color(0xFF5E3A9E).withValues(alpha: 0.4),
-                  ),
-                  border: InputBorder.none,
-                  contentPadding: const EdgeInsets.symmetric(
-                    horizontal: 20,
-                    vertical: 12,
-                  ),
-                ),
-              ),
-            ),
-          ),
-          const SizedBox(width: 12),
+          // Save as Diary Entry button - above the input row
           Consumer<AIChatProvider>(
             builder: (context, provider, child) {
-              final canSend = _hasText && !provider.isTyping;
-
-              return Container(
-                width: 48,
-                height: 48,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  gradient: LinearGradient(
-                    colors: canSend
-                        ? [
-                            const Color(0xFF6B4C93),
-                            const Color(0xFF8B6FA8),
-                          ]
-                        : [
-                            Colors.grey.shade400,
-                            Colors.grey.shade500,
-                          ],
-                  ),
-                  boxShadow: canSend
-                      ? [
-                          BoxShadow(
-                            color: const Color(0xFF6B4C93).withValues(alpha: 0.4),
-                            blurRadius: 8,
-                            spreadRadius: 2,
-                          ),
-                        ]
-                      : null,
-                ),
-                child: Material(
-                  color: Colors.transparent,
-                  child: InkWell(
-                    onTap: canSend ? _sendMessage : null,
-                    borderRadius: BorderRadius.circular(24),
-                    child: const Icon(
-                      Icons.send_rounded,
-                      color: Colors.white,
-                      size: 22,
+              final userMessageCount = provider.userMessageCount;
+              final isEnabled = userMessageCount >= 4;
+              
+              return Align(
+                alignment: Alignment.centerRight,
+                child: Padding(
+                  padding: const EdgeInsets.only(bottom: 8),
+                  child: GestureDetector(
+                    onTap: isEnabled
+                        ? () => _handleSaveAsDiary(context, isLightTheme, isDarkTheme)
+                        : () => _showInsufficientMessagesDialog(context, isLightTheme, isDarkTheme),
+                    child: Container(
+                      width: 48,
+                      height: 48,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: isEnabled
+                            ? const Color(0xFF6B4C93)
+                            : Colors.grey.shade400,
+                        boxShadow: isEnabled
+                            ? [
+                                BoxShadow(
+                                  color: const Color(0xFF6B4C93).withValues(alpha: 0.4),
+                                  blurRadius: 8,
+                                  spreadRadius: 2,
+                                ),
+                              ]
+                            : null,
+                      ),
+                      child: Icon(
+                        Icons.book_outlined,
+                        color: Colors.white,
+                        size: 22,
+                      ),
                     ),
                   ),
                 ),
               );
             },
+          ),
+          // Input row with text field and send button
+          Row(
+            children: [
+              Expanded(
+                child: Container(
+                  decoration: BoxDecoration(
+                    color: isDarkTheme
+                        ? Colors.white.withValues(alpha: 0.15)
+                        : Colors.white,
+                    borderRadius: BorderRadius.circular(24),
+                    border: Border.all(
+                      color: _isInputFocused
+                          ? const Color(0xFF6B4C93)
+                          : (isDarkTheme
+                              ? Colors.white.withValues(alpha: 0.4)
+                              : const Color(0xFF6B4C93).withValues(alpha: 0.5)),
+                      width: _isInputFocused ? 2.5 : 1.5,
+                    ),
+                    boxShadow: _isInputFocused
+                        ? [
+                            BoxShadow(
+                              color: const Color(0xFF6B4C93).withValues(alpha: 0.3),
+                              blurRadius: 12,
+                              spreadRadius: 2,
+                            ),
+                          ]
+                        : null,
+                  ),
+                  child: TextField(
+                    controller: _messageController,
+                    focusNode: _focusNode,
+                    maxLines: null,
+                    textInputAction: TextInputAction.send,
+                    onSubmitted: (_) => _sendMessage(),
+                    style: GoogleFonts.poppins(
+                      fontSize: 15,
+                      color: isDarkTheme ? Colors.white : const Color(0xFF5E3A9E),
+                    ),
+                    decoration: InputDecoration(
+                      hintText: 'Type your message...',
+                      hintStyle: GoogleFonts.poppins(
+                        fontSize: 15,
+                        color: isDarkTheme
+                            ? Colors.white.withValues(alpha: 0.5)
+                            : const Color(0xFF5E3A9E).withValues(alpha: 0.4),
+                      ),
+                      border: InputBorder.none,
+                      contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 20,
+                        vertical: 12,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Consumer<AIChatProvider>(
+                builder: (context, provider, child) {
+                  final canSend = _hasText && !provider.isTyping;
+
+                  return Container(
+                    width: 48,
+                    height: 48,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      gradient: LinearGradient(
+                        colors: canSend
+                            ? [
+                                const Color(0xFF6B4C93),
+                                const Color(0xFF8B6FA8),
+                              ]
+                            : [
+                                Colors.grey.shade400,
+                                Colors.grey.shade500,
+                              ],
+                      ),
+                      boxShadow: canSend
+                          ? [
+                              BoxShadow(
+                                color: const Color(0xFF6B4C93).withValues(alpha: 0.4),
+                                blurRadius: 8,
+                                spreadRadius: 2,
+                              ),
+                            ]
+                          : null,
+                    ),
+                    child: Material(
+                      color: Colors.transparent,
+                      child: InkWell(
+                        onTap: canSend ? _sendMessage : null,
+                        borderRadius: BorderRadius.circular(24),
+                        child: const Icon(
+                          Icons.send_rounded,
+                          color: Colors.white,
+                          size: 22,
+                        ),
+                      ),
+                    ),
+                  );
+                },
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+
+  Future<void> _handleSaveAsDiary(BuildContext context, bool isLightTheme, bool isDarkTheme) async {
+    final provider = Provider.of<AIChatProvider>(context, listen: false);
+    
+    // Properly detect dark theme using ThemeUtils (do this first)
+    final correctIsDarkTheme = await ThemeUtils.isDarkTheme();
+    final correctIsLightTheme = !correctIsDarkTheme;
+    
+    // Show loading indicator
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => Center(
+        child: Container(
+          padding: const EdgeInsets.all(20),
+          decoration: BoxDecoration(
+            color: correctIsDarkTheme ? Colors.grey[900] : Colors.white,
+            borderRadius: BorderRadius.circular(16),
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const CircularProgressIndicator(),
+              const SizedBox(height: 16),
+              Text(
+                'Creating your journal entry...',
+                style: GoogleFonts.poppins(
+                  color: correctIsDarkTheme ? Colors.white : const Color(0xFF5E3A9E),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+    
+    try {
+      // Get user messages only
+      final userMessages = provider.messages
+          .where((m) => m.sender == 'user')
+          .map((m) => m.text)
+          .toList();
+      
+      if (userMessages.isEmpty) {
+        if (!mounted) return;
+        Navigator.pop(context); // Close loading dialog
+        if (!mounted) return;
+        _showErrorDialog(context, 'No messages to summarize', correctIsLightTheme, correctIsDarkTheme);
+        return;
+      }
+      
+      // Call backend summarize API
+      final summary = await AIMLApiService().summarizeMessages(userMessages);
+      
+      if (!mounted) return;
+      Navigator.pop(context); // Close loading dialog
+      
+      if (!mounted) return;
+      
+      // Get theme bottom color to match home screen styling
+      final themeBottomColor = await ThemeStorageService.getBottomColor();
+      
+      if (!mounted) return;
+      
+      // Navigate to new entry screen with pre-filled content
+      // Set navigateToHomeOnSave to true so it goes to home after saving
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (context) => NewEntryScreen(
+            themeBottomColor: themeBottomColor,
+            isLightTheme: correctIsLightTheme,
+            initialContent: summary,
+            navigateToHomeOnSave: true,
+          ),
+        ),
+      );
+    } catch (e) {
+      Navigator.pop(context); // Close loading dialog
+      if (!mounted) return;
+      _showErrorDialog(
+        context,
+        'Failed to create journal entry. Please try again.',
+        correctIsLightTheme,
+        correctIsDarkTheme,
+      );
+    }
+  }
+
+  void _showInsufficientMessagesDialog(BuildContext context, bool isLightTheme, bool isDarkTheme) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: isDarkTheme ? Colors.grey[900] : Colors.white,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(16),
+        ),
+        title: Text(
+          'Write a little more',
+          style: GoogleFonts.poppins(
+            color: isDarkTheme ? Colors.white : const Color(0xFF5E3A9E),
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+        content: Text(
+          'Write a little more to create a meaningful entry.',
+          style: GoogleFonts.poppins(
+            color: isDarkTheme ? Colors.white70 : const Color(0xFF5E3A9E).withValues(alpha: 0.8),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: Text(
+              'OK',
+              style: GoogleFonts.poppins(
+                color: const Color(0xFF6B4C93),
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showErrorDialog(BuildContext context, String message, bool isLightTheme, bool isDarkTheme) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: isDarkTheme ? Colors.grey[900] : Colors.white,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(16),
+        ),
+        title: Text(
+          'Error',
+          style: GoogleFonts.poppins(
+            color: isDarkTheme ? Colors.white : const Color(0xFF5E3A9E),
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+        content: Text(
+          message,
+          style: GoogleFonts.poppins(
+            color: isDarkTheme ? Colors.white70 : const Color(0xFF5E3A9E).withValues(alpha: 0.8),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: Text(
+              'OK',
+              style: GoogleFonts.poppins(
+                color: const Color(0xFF6B4C93),
+                fontWeight: FontWeight.w600,
+              ),
+            ),
           ),
         ],
       ),

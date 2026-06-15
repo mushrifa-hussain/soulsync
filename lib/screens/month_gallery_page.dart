@@ -36,12 +36,16 @@ class _MonthGalleryPageState extends State<MonthGalleryPage> {
   }
 
   void _navigateToEntry(DiaryEntry entry, MediaAttachment media) async {
+    // Properly detect dark theme using ThemeUtils
+    final isDarkTheme = await ThemeUtils.isDarkTheme();
+    final isLightTheme = !isDarkTheme;
+    
     // Navigate directly to the diary entry where that media was added
     await Navigator.push(
       context,
       MaterialPageRoute(
         builder: (context) => NewEntryScreen(
-          isLightTheme: Theme.of(context).brightness == Brightness.light,
+          isLightTheme: isLightTheme,
           existingEntry: entry,
           scrollToMedia: media, // Pass media to scroll to
         ),
@@ -51,7 +55,6 @@ class _MonthGalleryPageState extends State<MonthGalleryPage> {
 
   @override
   Widget build(BuildContext context) {
-    final colorScheme = Theme.of(context).colorScheme;
     final isLightTheme = Theme.of(context).brightness == Brightness.light;
 
     return Scaffold(

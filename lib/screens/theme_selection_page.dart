@@ -5,7 +5,6 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:palette_generator/palette_generator.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:soulsync_dairyapp/services/theme_storage_service.dart';
-import 'package:soulsync_dairyapp/services/settings_service.dart';
 import 'package:soulsync_dairyapp/services/app_storage_service.dart';
 
 /// Theme Selection Page - Displays theme previews in a diary page style
@@ -17,11 +16,13 @@ import 'package:soulsync_dairyapp/services/app_storage_service.dart';
 class ThemeSelectionPage extends StatefulWidget {
   final Color? initialBackgroundColor;
   final Color? initialDotColor;
+  final bool isFirstTime; // True if this is the first time selecting theme (during onboarding)
   
   const ThemeSelectionPage({
     super.key,
     this.initialBackgroundColor,
     this.initialDotColor,
+    this.isFirstTime = false, // Default to false (not first time)
   });
 
   @override
@@ -49,10 +50,6 @@ class _ThemeSelectionPageState extends State<ThemeSelectionPage>
   // Button animation controllers
   late AnimationController _buttonAnimationController;
   late Animation<double> _buttonScaleAnimation;
-  
-  // Theme sound toggle state
-  bool _themeSoundEnabled = true;
-  
 
   // Fixed image height for consistent alignment
   static const double _imageHeight = 280.0;
@@ -108,9 +105,6 @@ class _ThemeSelectionPageState extends State<ThemeSelectionPage>
       ),
     );
     
-    // Load theme sound setting
-    _loadThemeSoundSetting();
-    
     // Initialize colors synchronously - MUST be ready on first build
     // Index 0 is default theme - use default gradient colors
     _currentIndex = 0;
@@ -137,16 +131,20 @@ class _ThemeSelectionPageState extends State<ThemeSelectionPage>
     // Ensure animation is at end state immediately (no animation on first render)
     _colorAnimationController.value = 1.0;
     
-    // Start color extraction AFTER first frame (completely non-blocking)
-    // This ensures the screen renders immediately with correct colors
-    // First theme color is already preloaded, so no update needed
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      // Preload remaining theme colors in background
-      _preloadAllThemeColors();
-    });
-    
     // Add listener to page controller for real-time color updates during swipe
     _pageController.addListener(_onPageControllerChanged);
+    
+    // Start color extraction AFTER first frame (completely non-blocking)
+    // Use a small delay to ensure UI renders first, then load colors in background
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      // Add a small delay to ensure smooth navigation
+      Future.delayed(const Duration(milliseconds: 100), () {
+        if (mounted) {
+          // Preload remaining theme colors in background
+          _preloadAllThemeColors();
+        }
+      });
+    });
   }
   
   /// Preload colors for all themes to ensure smooth transitions
@@ -403,16 +401,6 @@ class _ThemeSelectionPageState extends State<ThemeSelectionPage>
   }
 
 
-  /// Load theme sound setting
-  Future<void> _loadThemeSoundSetting() async {
-    final enabled = await SettingsService.getThemeSoundEnabled();
-    if (mounted) {
-      setState(() {
-        _themeSoundEnabled = enabled;
-      });
-    }
-  }
-
   /// Load image from ImageProvider
   Future<ui.Image?> _loadImageFromProvider(ImageProvider provider) async {
     final completer = Completer<ui.Image>();
@@ -543,29 +531,37 @@ class _ThemeSelectionPageState extends State<ThemeSelectionPage>
       _buttonAnimationController.reverse();
     });
     
-    // Clear theme path to use default gradient
-    await ThemeStorageService.clearThemePath();
-    // Save default bottom color
-    await ThemeStorageService.saveBottomColor(const Color(0xFFDDEBFF));
-    
-    // Mark theme as selected (onboarding complete) - "Later" also counts as selection
-    await AppStorageService.setThemeSelected();
-    
-    // Navigate based on authentication status
-    // If user is already logged in, go back to home (clear stack to make Home root)
-    // Otherwise, go to signup (first time setup)
-    if (mounted && context.mounted) {
-      final user = FirebaseAuth.instance.currentUser;
-      if (user != null) {
-        // User is already logged in, go back to home and clear navigation stack
-        // This ensures Home is the root and back button will exit app
-        Navigator.of(context).pushNamedAndRemoveUntil(
-          '/home',
-          (route) => false, // Remove all previous routes
-        );
-      } else {
-        // User not logged in, go to signup (first time setup)
-        Navigator.of(context).pushReplacementNamed('/signup');
+    // Only set default theme if this is the first time (during onboarding)
+    if (widget.isFirstTime) {
+      // Clear theme path to use default gradient
+      await ThemeStorageService.clearThemePath();
+      // Save default bottom color
+      await ThemeStorageService.saveBottomColor(const Color(0xFFDDEBFF));
+      
+      // Mark theme as selected (onboarding complete) - "Later" also counts as selection
+      await AppStorageService.setThemeSelected();
+      
+      // Navigate based on authentication status
+      // If user is already logged in, go back to home (clear stack to make Home root)
+      // Otherwise, go to signup (first time setup)
+      if (mounted && context.mounted) {
+        final user = FirebaseAuth.instance.currentUser;
+        if (user != null) {
+          // User is already logged in, go back to home and clear navigation stack
+          // This ensures Home is the root and back button will exit app
+          Navigator.of(context).pushNamedAndRemoveUntil(
+            '/home',
+            (route) => false, // Remove all previous routes
+          );
+        } else {
+          // User not logged in, go to signup (first time setup)
+          Navigator.of(context).pushReplacementNamed('/signup');
+        }
+      }
+    } else {
+      // Not first time - just close without changing theme
+      if (mounted && context.mounted) {
+        Navigator.of(context).pop();
       }
     }
   }
@@ -600,7 +596,6 @@ class _ThemeSelectionPageState extends State<ThemeSelectionPage>
     // Determine if current theme is dark for app bar text color
     final isDarkTheme = _isDarkThemeCache[_currentIndex] ?? false;
     final appBarTextColor = isDarkTheme ? Colors.white : const Color(0xFF6B4C93);
-    final appBarIconColor = isDarkTheme ? Colors.white : const Color(0xFF6B4C93);
     
     // Use current background color immediately (no waiting for async)
     // Always use a valid color - default to soft purple if not set
@@ -626,33 +621,7 @@ class _ThemeSelectionPageState extends State<ThemeSelectionPage>
         centerTitle: true,
         backgroundColor: Colors.transparent, // Transparent to blend with body
         elevation: 0,
-        actions: [
-          // Theme sound toggle
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 8.0),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(
-                  _themeSoundEnabled ? Icons.volume_up : Icons.volume_off,
-                  color: appBarIconColor,
-                  size: 20,
-                ),
-                const SizedBox(width: 4),
-                Switch(
-                  value: _themeSoundEnabled,
-                  onChanged: (value) async {
-                    await SettingsService.setThemeSoundEnabled(value);
-                    setState(() {
-                      _themeSoundEnabled = value;
-                    });
-                  },
-                  activeThumbColor: appBarIconColor,
-                ),
-              ],
-            ),
-          ),
-        ],
+        actions: const [], // Removed sound toggle
         flexibleSpace: AnimatedBuilder(
           animation: _colorAnimationController,
           builder: (context, child) {

@@ -64,6 +64,27 @@ class ThemeUtils {
     }
   }
 
+  /// Get the lighter background color for secondary screens (same as new entry screen)
+  /// For dark themes, this returns a lighter version of the bottom color
+  /// For light themes, returns the same as getBottomGradientColor
+  static Future<Color> getLighterBackgroundColor(BuildContext context) async {
+    final isDark = await isDarkTheme();
+    final bottomColor = await getBottomGradientColor(context);
+    
+    // For dark themes, apply the lighter calculation (same as new entry screen)
+    if (isDark) {
+      return Color.fromRGBO(
+        ((bottomColor.r * 255.0) * 0.85 + 255 * 0.15).round().clamp(0, 255),
+        ((bottomColor.g * 255.0) * 0.85 + 255 * 0.15).round().clamp(0, 255),
+        ((bottomColor.b * 255.0) * 0.85 + 255 * 0.15).round().clamp(0, 255),
+        1.0,
+      );
+    }
+    
+    // For light themes, return the bottom color as is
+    return bottomColor;
+  }
+
   /// Get the full gradient for primary screens (Home, Splash, Onboarding)
   static List<Color> getPrimaryGradient(BuildContext context) {
     final isLightTheme = Theme.of(context).brightness == Brightness.light;

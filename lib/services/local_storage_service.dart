@@ -8,6 +8,19 @@ class LocalStorageService {
   static const String _boxName = 'diary_entries';
   static Box<Map>? _box;
 
+  /// Recursively convert Map<dynamic, dynamic> to Map<String, dynamic>
+  /// and List<dynamic> to List with proper type conversions
+  static dynamic _convertToTyped(dynamic value) {
+    if (value is Map) {
+      return Map<String, dynamic>.from(
+        value.map((key, val) => MapEntry(key.toString(), _convertToTyped(val))),
+      );
+    } else if (value is List) {
+      return value.map((item) => _convertToTyped(item)).toList();
+    }
+    return value;
+  }
+
   /// Initialize Hive and open the diary entries box
   static Future<void> initialize() async {
     try {
@@ -57,8 +70,8 @@ class LocalStorageService {
         try {
           final entryData = box.get(key);
           if (entryData != null) {
-            // Convert Hive Map to regular Map
-            final json = Map<String, dynamic>.from(entryData as Map);
+            // Convert Hive Map<dynamic, dynamic> to Map<String, dynamic> recursively
+            final json = _convertToTyped(entryData) as Map<String, dynamic>;
             final entry = DiaryEntry.fromJson(json);
             entries.add(entry);
           }
@@ -85,7 +98,8 @@ class LocalStorageService {
       final entryData = box.get(id);
       
       if (entryData != null) {
-        final json = Map<String, dynamic>.from(entryData as Map);
+        // Convert Hive Map<dynamic, dynamic> to Map<String, dynamic> recursively
+        final json = _convertToTyped(entryData) as Map<String, dynamic>;
         return DiaryEntry.fromJson(json);
       }
       return null;

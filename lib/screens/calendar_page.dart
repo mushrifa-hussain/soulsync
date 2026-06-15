@@ -11,6 +11,7 @@ import 'package:soulsync_dairyapp/widgets/mood_selection_dialog.dart';
 import 'package:soulsync_dairyapp/widgets/soulsync_card.dart';
 import 'package:soulsync_dairyapp/widgets/theme_background_wrapper.dart';
 import 'package:soulsync_dairyapp/utils/theme_utils.dart';
+import 'package:soulsync_dairyapp/services/theme_storage_service.dart';
 
 class CalendarPage extends StatefulWidget {
   const CalendarPage({super.key});
@@ -112,21 +113,41 @@ class _CalendarPageState extends State<CalendarPage> with SingleTickerProviderSt
     final skipMoodSelection = await SettingsService.getSkipMoodSelection();
     String? selectedMood;
     
+    // Get theme bottom color to match home screen background (needed for dialog background)
+    final themeBottomColor = await ThemeStorageService.getBottomColor();
+    // Properly detect dark theme using ThemeUtils
+    final isDarkTheme = await ThemeUtils.isDarkTheme();
+    final isLightTheme = !isDarkTheme;
+    
     // Show mood selection dialog if not skipped
     if (!skipMoodSelection) {
       if (!mounted) return;
-      selectedMood = await MoodSelectionDialog.show(context);
+      // Calculate background color to match the entry screen
+      Color? dialogBackgroundColor;
+      if (themeBottomColor != null) {
+        final color = themeBottomColor;
+        dialogBackgroundColor = Color.fromRGBO(
+          ((color.r * 255.0) * 0.85 + 255 * 0.15).round().clamp(0, 255),
+          ((color.g * 255.0) * 0.85 + 255 * 0.15).round().clamp(0, 255),
+          ((color.b * 255.0) * 0.85 + 255 * 0.15).round().clamp(0, 255),
+          1.0,
+        );
+      } else {
+        dialogBackgroundColor = const Color(0xFFE8D5FF);
+      }
+      selectedMood = await MoodSelectionDialog.show(context, backgroundColor: dialogBackgroundColor);
       // If user cancelled mood selection, don't proceed
       if (selectedMood == null || !mounted) return;
     }
     
-    // Navigate to entry screen with selected mood
+    // Navigate to entry screen with selected mood and theme color
     if (!mounted) return;
     await Navigator.push(
       context,
       MaterialPageRoute(
         builder: (context) => NewEntryScreen(
-          isLightTheme: Theme.of(context).brightness == Brightness.light,
+          themeBottomColor: themeBottomColor,
+          isLightTheme: isLightTheme,
           existingEntry: null, // New entry
           initialDate: _selectedDate, // Pass selected date
           initialMood: selectedMood, // Pass selected mood
@@ -655,9 +676,11 @@ class _CalendarPageState extends State<CalendarPage> with SingleTickerProviderSt
                                 fontWeight: isSelected ? FontWeight.w600 : FontWeight.w500,
                                 color: isSelected
                                     ? Colors.white
+                                    : (isDarkTheme
+                                    ? Colors.white
                                     : (isLightTheme
                                         ? const Color(0xFF5E3A9E)
-                                        : Colors.white),
+                                            : Colors.white)),
                               ),
                             ),
                             // Mood emoji overlay (inside circle, top-center)
@@ -772,10 +795,14 @@ class _CalendarPageState extends State<CalendarPage> with SingleTickerProviderSt
         ...entriesForSelectedDate.map((entry) {
           return GestureDetector(
             onTap: () async {
+              // Get theme bottom color to match home screen background
+              final themeBottomColor = await ThemeStorageService.getBottomColor();
+              
               await Navigator.push(
                 context,
                 MaterialPageRoute(
                   builder: (context) => NewEntryScreen(
+                    themeBottomColor: themeBottomColor,
                     isLightTheme: isLightTheme,
                     existingEntry: entry,
                   ),
@@ -881,35 +908,32 @@ class _CalendarPageState extends State<CalendarPage> with SingleTickerProviderSt
   }
 
   Widget _buildAddEntryButton(bool isLightTheme, bool isDarkTheme) {
+    final textColor = isDarkTheme
+        ? Colors.white
+        : (isLightTheme ? const Color(0xFF5E3A9E) : Colors.white);
+    
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-      child: SizedBox(
-        width: double.infinity,
-        child: ElevatedButton(
-          onPressed: _navigateToAddEntry,
-          style: ElevatedButton.styleFrom(
-          backgroundColor: const Color(0xFF5E3A9E),
-            foregroundColor: Colors.white,
-            padding: const EdgeInsets.symmetric(vertical: 14),
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(12),
-            ),
-            elevation: 2,
-          ),
+      child: GestureDetector(
+        onTap: _navigateToAddEntry,
           child: Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              const Icon(Icons.add, size: 20),
+            Icon(
+              Icons.add_rounded,
+              size: 20,
+              color: textColor,
+            ),
               const SizedBox(width: 8),
               Text(
                 'Add Entry',
                 style: GoogleFonts.poppins(
                   fontSize: 15,
                   fontWeight: FontWeight.w600,
+                color: textColor,
                 ),
               ),
             ],
-          ),
         ),
       ),
     );

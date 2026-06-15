@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 import '../services/reminder_service.dart';
-import '../utils/theme_utils.dart';
 import '../widgets/theme_background_wrapper.dart';
 
 class AddReminderPage extends StatefulWidget {
@@ -160,7 +159,6 @@ class _AddReminderPageState extends State<AddReminderPage> {
 
   @override
   Widget build(BuildContext context) {
-    final colorScheme = Theme.of(context).colorScheme;
     final isLightTheme = Theme.of(context).brightness == Brightness.light;
     final dateFormat = DateFormat('MMM d, yyyy');
 

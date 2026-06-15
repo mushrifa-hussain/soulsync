@@ -14,7 +14,7 @@ class ThemeBackgroundWrapper extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return FutureBuilder<Color>(
-      future: ThemeUtils.getBottomGradientColor(context),
+      future: ThemeUtils.getLighterBackgroundColor(context),
       builder: (context, snapshot) {
         final backgroundColor = snapshot.data ?? 
             (Theme.of(context).brightness == Brightness.light 

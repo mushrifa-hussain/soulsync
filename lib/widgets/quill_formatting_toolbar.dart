@@ -405,15 +405,6 @@ class _QuillFormattingToolbarState extends State<QuillFormattingToolbar> {
     }
   }
 
-  dynamic _getAttribute(String attribute) {
-    try {
-      final style = widget.controller.getSelectionStyle();
-      return style.attributes[attribute];
-    } catch (e) {
-      return null;
-    }
-  }
-
   bool _isSizeActive(String label) {
     try {
       final attributes = widget.controller.getSelectionStyle().attributes;
@@ -441,10 +432,6 @@ class _QuillFormattingToolbarState extends State<QuillFormattingToolbar> {
     } catch (e) {
       return false;
     }
-  }
-
-  String _colorToHex(Color color) {
-    return '#${color.value.toRadixString(16).substring(2).padLeft(6, '0')}';
   }
 
   void _showColorPicker(BuildContext context) {

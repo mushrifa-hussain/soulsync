@@ -18,6 +18,7 @@ import 'package:soulsync_dairyapp/screens/pin_setup_page.dart';
 import 'package:soulsync_dairyapp/screens/lock_options_page.dart';
 import 'package:soulsync_dairyapp/services/lock_service.dart';
 import 'package:soulsync_dairyapp/screens/reminders_page.dart';
+import 'package:soulsync_dairyapp/screens/todo_list_page.dart';
 import 'package:soulsync_dairyapp/screens/settings_page.dart';
 import 'package:soulsync_dairyapp/screens/privacy_policy_page.dart';
 import 'package:soulsync_dairyapp/screens/help_center_page.dart';
@@ -27,7 +28,6 @@ import 'package:soulsync_dairyapp/services/export_import_service.dart';
 import 'package:soulsync_dairyapp/services/settings_service.dart';
 import 'package:soulsync_dairyapp/widgets/mood_selection_dialog.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'dart:io';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -48,7 +48,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   bool _isSearchActive = false; // Whether search bar is visible
   TextEditingController? _searchController;
   
-  // Profile data
+  // Profile data (for future use)
   String? _profilePhotoPath;
   String? _profilePhotoUrl;
   
@@ -57,11 +57,69 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   late AnimationController _floatController;
   late AnimationController _blinkController;
   late AnimationController _glowPulseController;
+  late AnimationController _quoteController;
   late Animation<double> _fadeAnimation;
   late Animation<double> _floatAnimation;
   late Animation<Offset> _slideAnimation;
   late Animation<double> _blinkAnimation;
   late Animation<double> _glowPulseAnimation;
+  late Animation<double> _quoteFadeAnimation;
+  
+  // Motivational quotes
+  final List<String> _motivationalQuotes = [
+    '~ Every day is a fresh start 🌸',
+    '~ You are stronger than you think 💪',
+    '~ Small steps lead to big changes ✨',
+    '~ Your journey matters 🌟',
+    '~ Believe in yourself 💜',
+    '~ Today is full of possibilities 🌈',
+    '~ You are enough just as you are 🌷',
+    '~ Progress, not perfection 🌱',
+    '~ Your story is still being written 📖',
+    '~ Embrace the journey 🌸',
+    '~ You have the power to change 💫',
+    '~ Every moment is a new beginning 🌅',
+    '~ Trust the process 🌊',
+    '~ You are capable of amazing things ⭐',
+    '~ Growth happens one day at a time 🌱',
+    '~ Your feelings are valid 💙',
+    '~ Tomorrow is a new opportunity 🌄',
+    '~ You are worthy of happiness 💖',
+    '~ Keep moving forward 🚶',
+    '~ Self-care is not selfish 🌸',
+    '~ You are braver than you believe 💪',
+    '~ Every day brings new hope 🌅',
+    '~ Your potential is limitless ✨',
+    '~ Take it one step at a time 🦶',
+    '~ You are doing better than you think 🌟',
+    '~ Healing takes time, be patient 💜',
+    '~ You deserve peace and joy 🌈',
+    '~ Your voice matters 🗣️',
+    '~ Keep going, you\'ve got this 💪',
+    '~ Every challenge makes you stronger 🌳',
+    '~ You are loved and valued 💖',
+    '~ Today is a gift, that\'s why it\'s called present 🎁',
+    '~ You are exactly where you need to be 📍',
+    '~ Trust yourself 🌸',
+    '~ Your dreams are valid 🌙',
+    '~ Be kind to yourself today 💜',
+    '~ You are making progress, even if it\'s small 🌱',
+    '~ Every sunrise is a new beginning 🌅',
+    '~ You have the strength to overcome 💪',
+    '~ Your journey is unique and beautiful 🌟',
+    '~ Take a deep breath, you\'re doing great 🫁',
+    '~ You are not alone in this 💙',
+    '~ Every day you grow stronger 🌳',
+    '~ You deserve all the good things 💖',
+    '~ Keep shining your light ✨',
+    '~ Your story matters 📖',
+    '~ You are becoming who you\'re meant to be 🌸',
+    '~ Trust the timing of your life ⏰',
+    '~ You are resilient and strong 💪',
+    '~ Every moment is a chance to start fresh 🌅',
+  ];
+  
+  int _currentQuoteIndex = 0;
   
   // Constants
   static const double _imageHeight = 280.0;
@@ -154,6 +212,32 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
       ),
     );
     
+    // Initialize quote animation controller
+    // Total duration: 1 minute (60 seconds) + fade in/out time
+    _quoteController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 63000), // 1 min stay + 3 sec fade transitions
+    );
+    _quoteFadeAnimation = TweenSequence<double>([
+      TweenSequenceItem(
+        tween: Tween<double>(begin: 0.0, end: 1.0)
+            .chain(CurveTween(curve: Curves.easeIn)),
+        weight: 2.38, // Fade in: 1.5 seconds
+      ),
+      TweenSequenceItem(
+        tween: ConstantTween<double>(1.0),
+        weight: 95.24, // Stay visible: 60 seconds (1 minute)
+      ),
+      TweenSequenceItem(
+        tween: Tween<double>(begin: 1.0, end: 0.0)
+            .chain(CurveTween(curve: Curves.easeOut)),
+        weight: 2.38, // Fade out: 1.5 seconds
+      ),
+    ]).animate(_quoteController);
+    
+    // Start quote animation cycle
+    _startQuoteCycle();
+    
     _loadTheme();
     _loadSortPreference();
     _loadProfileData();
@@ -166,6 +250,65 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     
     // Start fade-in animation
     _fadeController.forward();
+  }
+  
+  /// Start quote animation cycle
+  void _startQuoteCycle() {
+    _quoteController.addStatusListener((status) {
+      if (status == AnimationStatus.completed) {
+        // Move to next quote
+        setState(() {
+          _currentQuoteIndex = (_currentQuoteIndex + 1) % _motivationalQuotes.length;
+        });
+        // Restart animation
+        _quoteController.reset();
+        _quoteController.forward();
+      }
+    });
+    // Start the first quote
+    _quoteController.forward();
+  }
+  
+  /// Build motivational quote widget
+  Widget _buildQuoteWidget() {
+    final isDarkTheme = !_isLightTheme;
+    final textColor = isDarkTheme 
+        ? Colors.white 
+        : const Color(0xFF5E3A9E); // Purple for light themes
+    
+    return FadeTransition(
+      opacity: _quoteFadeAnimation,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+        child: Text(
+          _motivationalQuotes[_currentQuoteIndex],
+          style: GoogleFonts.poppins(
+            fontSize: 15,
+            fontWeight: FontWeight.w400,
+            fontStyle: FontStyle.italic,
+            color: textColor,
+            letterSpacing: 0.5,
+            height: 1.4,
+            shadows: isDarkTheme
+                ? [
+                    Shadow(
+                      color: Colors.black.withValues(alpha: 0.3),
+                      blurRadius: 4,
+                      offset: const Offset(0, 1),
+                    ),
+                  ]
+                : [
+                    Shadow(
+                      color: Colors.white.withValues(alpha: 0.5),
+                      blurRadius: 4,
+                      offset: const Offset(0, 1),
+                    ),
+                  ],
+          ),
+          textAlign: TextAlign.center,
+        ),
+      ),
+    );
   }
   
   /// Load profile data for display
@@ -194,6 +337,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     _floatController.dispose();
     _blinkController.dispose();
     _glowPulseController.dispose();
+    _quoteController.dispose();
     _searchController?.dispose();
     super.dispose();
   }
@@ -444,7 +588,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
 
     return PopScope(
       canPop: false,
-      onPopInvoked: (didPop) async {
+      onPopInvokedWithResult: (didPop, result) async {
         if (didPop) return;
         // Exit app when back button is pressed on Home screen
         SystemNavigator.pop();
@@ -750,6 +894,13 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                 return _buildScrollableDefaultGradient();
               },
             ),
+            // Motivational quote - positioned a bit above the bottom
+            Positioned(
+              bottom: 50, // Positioned above the gradient overlay
+              left: 0,
+              right: 0,
+              child: _buildQuoteWidget(),
+            ),
             Positioned(
               bottom: 0,
               left: 0,
@@ -822,6 +973,17 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
               Color(0xFFB8E6FF), // Sky blue
             ],
           ),
+        ),
+        child: Stack(
+          children: [
+            // Motivational quote - positioned a bit above the bottom
+            Positioned(
+              bottom: 50, // Positioned above the bottom
+              left: 0,
+              right: 0,
+              child: _buildQuoteWidget(),
+            ),
+          ],
         ),
       ),
     );
@@ -1349,7 +1511,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
       }
     });
     
-    // Show undo snackbar
+    // Show undo snackbar with auto-dismiss after 4 seconds
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Row(
@@ -1368,7 +1530,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
           ],
         ),
         backgroundColor: const Color(0xFF9169DC).withValues(alpha: 0.85),
-        duration: const Duration(seconds: 3),
+        duration: const Duration(seconds: 4), // Auto-dismiss after 4 seconds
         behavior: SnackBarBehavior.floating,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(20),
@@ -1530,7 +1692,20 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                 // Show mood selection dialog if not skipped
                 if (!skipMoodSelection) {
                   if (!mounted) return;
-                  selectedMood = await MoodSelectionDialog.show(context);
+                  // Calculate background color to match the entry screen
+                  Color? dialogBackgroundColor;
+                  if (_themeBottomColor != null) {
+                    final color = _themeBottomColor!;
+                    dialogBackgroundColor = Color.fromRGBO(
+                      ((color.r * 255.0) * 0.85 + 255 * 0.15).round().clamp(0, 255),
+                      ((color.g * 255.0) * 0.85 + 255 * 0.15).round().clamp(0, 255),
+                      ((color.b * 255.0) * 0.85 + 255 * 0.15).round().clamp(0, 255),
+                      1.0,
+                    );
+                  } else {
+                    dialogBackgroundColor = const Color(0xFFE8D5FF);
+                  }
+                  selectedMood = await MoodSelectionDialog.show(context, backgroundColor: dialogBackgroundColor);
                   // If user cancelled mood selection, don't proceed
                   if (selectedMood == null || !mounted) return;
                 }
@@ -1589,20 +1764,6 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
             ),
           ],
         ),
-      ),
-    );
-  }
-
-  /// Build fallback profile icon
-  Widget _buildProfileFallback() {
-    return Container(
-      color: Colors.white.withValues(alpha: 0.3),
-      child: Icon(
-        Icons.person_outline_rounded,
-        size: 24,
-        color: _isLightTheme
-            ? const Color(0xFF5E3A9E).withValues(alpha: 0.8)
-            : Colors.white.withValues(alpha: 0.9),
       ),
     );
   }
@@ -1739,21 +1900,50 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                           isLightTheme: _isLightTheme,
                           onTap: () {
                             Navigator.pop(context);
+                            // Navigate with smooth transition
                             Navigator.push(
                               context,
                               PageRouteBuilder(
                                 pageBuilder: (context, animation, secondaryAnimation) =>
                                     const ThemeSelectionPage(),
                                 transitionsBuilder: (context, animation, secondaryAnimation, child) {
-                                  return FadeTransition(
-                                    opacity: animation,
-                                    child: child,
+                                  // Smooth fade and slide transition
+                                  const begin = Offset(0.0, 0.05); // Slight upward slide
+                                  const end = Offset.zero;
+                                  const curve = Curves.easeOutCubic;
+                                  
+                                  var slideTween = Tween(begin: begin, end: end)
+                                      .chain(CurveTween(curve: curve));
+                                  var fadeTween = Tween(begin: 0.0, end: 1.0)
+                                      .chain(CurveTween(curve: curve));
+                                  
+                                  return SlideTransition(
+                                    position: animation.drive(slideTween),
+                                    child: FadeTransition(
+                                      opacity: animation.drive(fadeTween),
+                                      child: child,
+                                    ),
                                   );
                                 },
-                                transitionDuration: const Duration(milliseconds: 300),
+                                transitionDuration: const Duration(milliseconds: 400),
                                 reverseTransitionDuration: const Duration(milliseconds: 300),
                               ),
                             ).then((_) => _loadTheme());
+                            // Precache theme images in background (non-blocking)
+                            final themePaths = [
+                              'assets/themes/theme_blossom_serenity.jpg',
+                              'assets/themes/theme_ocean_haze.jpg',
+                              'assets/themes/theme_midnight_whispers.jpg',
+                              'assets/themes/theme_rainbow_whispers.jpg',
+                              'assets/themes/theme_angel_feathers.jpg',
+                              'assets/themes/theme_butterfly_night.jpg',
+                              'assets/themes/theme_cozy_evening_glow.jpg',
+                              'assets/themes/theme_dreamy_dawn.jpg',
+                            ];
+                            // Precache images in background without blocking (errors are ignored)
+                            Future.wait(themePaths.map((path) => precacheImage(AssetImage(path), context).catchError((e) {
+                              debugPrint('Error precaching theme image $path: $e');
+                            })));
                           },
                         ),
                         const SizedBox(height: 2),
@@ -1796,6 +1986,21 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                               context,
                               MaterialPageRoute(
                                 builder: (context) => const RemindersPage(),
+                              ),
+                            );
+                          },
+                        ),
+                        const SizedBox(height: 2),
+                        _buildDrawerItem(
+                          icon: Icons.checklist_rounded,
+                          title: 'To-Do List',
+                          isLightTheme: _isLightTheme,
+                          onTap: () {
+                            Navigator.pop(context);
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (context) => const TodoListPage(),
                               ),
                             );
                           },
@@ -1955,12 +2160,14 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     required String title,
     required bool isLightTheme,
     required VoidCallback onTap,
+    bool useAIIcon = false,
   }) {
     return _DrawerItemWidget(
       icon: icon,
       title: title,
       isLightTheme: isLightTheme,
       onTap: onTap,
+      useAIIcon: useAIIcon,
     );
   }
 
@@ -2142,6 +2349,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
       ),
     );
 
+    if (!mounted) return;
     if (result == 'export') {
       await _handleExport(context);
     } else if (result == 'import') {
@@ -2171,22 +2379,22 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
 
       await ExportImportService.exportEntries();
       
-      if (mounted) {
-        Navigator.of(context).pop(); // Close loading dialog
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              'Export completed successfully',
-              style: GoogleFonts.poppins(),
-            ),
-            backgroundColor: Colors.green,
-            behavior: SnackBarBehavior.floating,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(12),
-            ),
+      if (!mounted) return;
+      Navigator.of(context).pop(); // Close loading dialog
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'Export completed successfully',
+            style: GoogleFonts.poppins(),
           ),
-        );
-      }
+          backgroundColor: Colors.green,
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+          ),
+        ),
+      );
     } catch (e) {
       if (mounted) {
         Navigator.of(context).pop(); // Close loading dialog
@@ -2229,60 +2437,61 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
 
       final result = await ExportImportService.importEntries();
       
+      if (!mounted) return;
       // Reload entries in provider
       final provider = Provider.of<DiaryEntriesProvider>(context, listen: false);
       await provider.loadEntries();
       
-      if (mounted) {
-        Navigator.of(context).pop(); // Close loading dialog
-        showDialog(
-          context: context,
-          builder: (context) => AlertDialog(
-            title: Text(
-              'Import Complete',
-              style: GoogleFonts.poppins(
-                fontWeight: FontWeight.w600,
-              ),
+      if (!mounted) return;
+      Navigator.of(context).pop(); // Close loading dialog
+      if (!mounted) return;
+      showDialog(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: Text(
+            'Import Complete',
+            style: GoogleFonts.poppins(
+              fontWeight: FontWeight.w600,
             ),
-            content: Text(
-              result.summary,
-              style: GoogleFonts.poppins(),
-            ),
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(16),
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(context),
-                child: Text(
-                  'OK',
-                  style: GoogleFonts.poppins(
-                    fontWeight: FontWeight.w600,
-                    color: const Color(0xFF5E3A9E),
-                  ),
+          ),
+          content: Text(
+            result.summary,
+            style: GoogleFonts.poppins(),
+          ),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: Text(
+                'OK',
+                style: GoogleFonts.poppins(
+                  fontWeight: FontWeight.w600,
+                  color: const Color(0xFF5E3A9E),
                 ),
               ),
-            ],
-          ),
-        );
-      }
+            ),
+          ],
+        ),
+      );
     } catch (e) {
-      if (mounted) {
-        Navigator.of(context).pop(); // Close loading dialog
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              'Import failed: ${e.toString()}',
-              style: GoogleFonts.poppins(),
-            ),
-            backgroundColor: Colors.red,
-            behavior: SnackBarBehavior.floating,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(12),
-            ),
+      if (!mounted) return;
+      Navigator.of(context).pop(); // Close loading dialog
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'Import failed: ${e.toString()}',
+            style: GoogleFonts.poppins(),
           ),
-        );
-      }
+          backgroundColor: Colors.red,
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+          ),
+        ),
+      );
     }
   }
 }
@@ -2384,12 +2593,14 @@ class _DrawerItemWidget extends StatefulWidget {
   final String title;
   final VoidCallback onTap;
   final bool _isLightTheme;
+  final bool useAIIcon;
 
   const _DrawerItemWidget({
     required this.icon,
     required this.title,
     required this.onTap,
     required bool isLightTheme,
+    this.useAIIcon = false,
   }) : _isLightTheme = isLightTheme;
 
   @override
@@ -2449,7 +2660,47 @@ class _DrawerItemWidgetState extends State<_DrawerItemWidget> with SingleTickerP
             contentPadding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 4.0),
             dense: true,
             visualDensity: VisualDensity.compact,
-            leading: Container(
+            leading: widget.useAIIcon
+                ? Container(
+                    width: 34,
+                    height: 34,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      boxShadow: [
+                        BoxShadow(
+                          color: const Color(0xFF6B4C93).withValues(alpha: 0.3),
+                          blurRadius: 8,
+                          spreadRadius: 1,
+                        ),
+                      ],
+                    ),
+                    child: ClipOval(
+                      child: Image.asset(
+                        'assets/images/ai_face_mouth.jpg',
+                        width: 34,
+                        height: 34,
+                        fit: BoxFit.cover,
+                        errorBuilder: (context, error, stackTrace) {
+                          return Container(
+                            width: 34,
+                            height: 34,
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              color: const Color(0xFFE8D5FF).withValues(alpha: 0.2),
+                            ),
+                            child: Icon(
+                              widget.icon,
+                              color: widget._isLightTheme
+                                  ? const Color(0xFF5E3A9E)
+                                  : Colors.white,
+                              size: 18,
+                            ),
+                          );
+                        },
+                      ),
+                    ),
+                  )
+                : Container(
               width: 34,
               height: 34,
               decoration: BoxDecoration(

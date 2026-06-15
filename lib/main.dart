@@ -36,9 +36,7 @@ Future<void> main() async {
     return false; // Let errors propagate normally
   };
 
-  await Firebase.initializeApp(
-    options: DefaultFirebaseOptions.currentPlatform,
-  );
+  await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
 
   debugPrint('🔥 [MAIN] Firebase initialized successfully');
 
@@ -47,7 +45,7 @@ Future<void> main() async {
   debugPrint('🔥 [MAIN] Local storage initialized successfully');
 
   tz_data.initializeTimeZones();
-  
+
   // After initializeTimeZones(), tz.local should automatically use the system's local timezone
   // Verify and log the timezone being used
   try {
@@ -64,7 +62,7 @@ Future<void> main() async {
 
   final notificationService = NotificationService();
   await notificationService.initialize();
-  
+
   runApp(const SoulSyncApp());
 }
 
@@ -91,9 +89,7 @@ class SoulSyncApp extends StatelessWidget {
             return provider;
           },
         ),
-        ChangeNotifierProvider(
-          create: (_) => AIChatProvider(),
-        ),
+        ChangeNotifierProvider(create: (_) => AIChatProvider()),
       ],
       child: MaterialApp(
         title: 'SoulSync',
@@ -103,10 +99,8 @@ class SoulSyncApp extends StatelessWidget {
           colorScheme: ColorScheme.fromSeed(
             seedColor: const Color(0xFF6B4C93),
             brightness: Brightness.light,
-      ),
-          textTheme: GoogleFonts.poppinsTextTheme(
-            ThemeData.light().textTheme,
           ),
+          textTheme: GoogleFonts.poppinsTextTheme(ThemeData.light().textTheme),
           cardTheme: CardThemeData(
             elevation: 0,
             shape: RoundedRectangleBorder(
@@ -119,13 +113,10 @@ class SoulSyncApp extends StatelessWidget {
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(16),
               ),
-              padding: const EdgeInsets.symmetric(
-                horizontal: 24,
-                vertical: 16,
-              ),
+              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
             ),
+          ),
         ),
-      ),
         home: const SplashScreen(),
         routes: {
           '/login': (context) => const LoginScreen(),

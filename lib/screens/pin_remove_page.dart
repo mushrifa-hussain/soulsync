@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../services/lock_service.dart';
 import 'home_screen.dart';
-import '../utils/theme_utils.dart';
 import '../widgets/theme_background_wrapper.dart';
 
 class PinRemovePage extends StatefulWidget {
@@ -82,8 +81,6 @@ class _PinRemovePageState extends State<PinRemovePage> {
   @override
   Widget build(BuildContext context) {
     final isLightTheme = Theme.of(context).brightness == Brightness.light;
-
-    final colorScheme = Theme.of(context).colorScheme;
     
     return Scaffold(
       resizeToAvoidBottomInset: true,
